@@ -145,6 +145,7 @@ generate_reality_keys() {
 prepare_dirs() {
   install -d -m 0755 "${APP_DIR}"
   install -d -m 0755 "${APP_DIR}/config"
+  install -d -m 0755 "${APP_DIR}/client"
   install -d -m 0755 "${APP_DIR}/logs/xray"
   install -d -m 0755 "${APP_DIR}/data/filebrowser"
   install -d -m 0700 "${APP_DIR}/certs"
@@ -289,9 +290,108 @@ detect_reality_endpoint() {
   hostname -I 2>/dev/null | awk '{print $1}'
 }
 
-print_summary() {
+build_xhttp_link() {
+  printf 'vless://%s@%s:443?encryption=none&security=tls&sni=%s&host=%s&type=xhttp&path=/%s#xray-xhttp\n' \
+    "${XRAY_UUID}" \
+    "${DOMAIN}" \
+    "${DOMAIN}" \
+    "${DOMAIN}" \
+    "${XRAY_XHTTP_PATH}"
+}
+
+build_reality_link() {
   local endpoint
+  endpoint="$1"
+
+  printf 'vless://%s@%s:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#xray-reality\n' \
+    "${XRAY_UUID}" \
+    "${endpoint}" \
+    "${XRAY_REALITY_SERVER_NAME}" \
+    "${XRAY_REALITY_PUBLIC_KEY}" \
+    "${XRAY_REALITY_SHORT_ID}"
+}
+
+write_client_files() {
+  local endpoint xhttp_link reality_link xhttp_json reality_json
   endpoint="$(detect_reality_endpoint || true)"
+  endpoint="${endpoint:-<server-ip>}"
+  xhttp_link="$(build_xhttp_link)"
+  reality_link="$(build_reality_link "${endpoint}")"
+
+  cat >"${APP_DIR}/client/xhttp.txt" <<EOF
+Type: VLESS + XHTTP + TLS
+Address: ${DOMAIN}
+Port: 443
+UUID: ${XRAY_UUID}
+Security: tls
+SNI: ${DOMAIN}
+Host: ${DOMAIN}
+Transport: xhttp
+Path: /${XRAY_XHTTP_PATH}
+
+Import link:
+${xhttp_link}
+EOF
+
+  cat >"${APP_DIR}/client/reality.txt" <<EOF
+Type: VLESS + REALITY + Vision
+Address: ${endpoint}
+Port: 443
+UUID: ${XRAY_UUID}
+Flow: xtls-rprx-vision
+Security: reality
+SNI: ${XRAY_REALITY_SERVER_NAME}
+Public key: ${XRAY_REALITY_PUBLIC_KEY}
+Short ID: ${XRAY_REALITY_SHORT_ID}
+Fingerprint: chrome
+
+Import link:
+${reality_link}
+EOF
+
+  xhttp_json="${APP_DIR}/client/xhttp-params.json"
+  cat >"${xhttp_json}" <<EOF
+{
+  "label": "xray-xhttp",
+  "protocol": "vless",
+  "transport": "xhttp",
+  "security": "tls",
+  "address": "${DOMAIN}",
+  "port": 443,
+  "uuid": "${XRAY_UUID}",
+  "sni": "${DOMAIN}",
+  "host": "${DOMAIN}",
+  "path": "/${XRAY_XHTTP_PATH}",
+  "import_link": "${xhttp_link}"
+}
+EOF
+
+  reality_json="${APP_DIR}/client/reality-params.json"
+  cat >"${reality_json}" <<EOF
+{
+  "label": "xray-reality",
+  "protocol": "vless",
+  "transport": "tcp",
+  "security": "reality",
+  "address": "${endpoint}",
+  "port": 443,
+  "uuid": "${XRAY_UUID}",
+  "flow": "xtls-rprx-vision",
+  "sni": "${XRAY_REALITY_SERVER_NAME}",
+  "public_key": "${XRAY_REALITY_PUBLIC_KEY}",
+  "short_id": "${XRAY_REALITY_SHORT_ID}",
+  "fingerprint": "chrome",
+  "import_link": "${reality_link}"
+}
+EOF
+}
+
+print_summary() {
+  local endpoint xhttp_link reality_link
+  endpoint="$(detect_reality_endpoint || true)"
+  endpoint="${endpoint:-<server-ip>}"
+  xhttp_link="$(build_xhttp_link)"
+  reality_link="$(build_reality_link "${endpoint}")"
 
   cat <<EOF
 
@@ -302,20 +402,28 @@ Files:
   Xray config: ${APP_DIR}/config/config.jsonc
   Nginx HTTP config: /etc/nginx/conf.d/xray-http.conf
   Nginx stream config: /etc/nginx/stream-conf.d/xray-stream.conf
+  XHTTP client profile: ${APP_DIR}/client/xhttp.txt
+  REALITY client profile: ${APP_DIR}/client/reality.txt
+  XHTTP params JSON: ${APP_DIR}/client/xhttp-params.json
+  REALITY params JSON: ${APP_DIR}/client/reality-params.json
 
 Client values:
   Domain (XHTTP over CDN): ${DOMAIN}
   UUID: ${XRAY_UUID}
   XHTTP path: ${XRAY_XHTTP_PATH}
-  REALITY endpoint: ${endpoint:-<server-ip>}
+  REALITY endpoint: ${endpoint}
   REALITY serverName/SNI: ${XRAY_REALITY_SERVER_NAME}
   REALITY public key: ${XRAY_REALITY_PUBLIC_KEY}
   REALITY shortId: ${XRAY_REALITY_SHORT_ID}
 
+Import links:
+  XHTTP: ${xhttp_link}
+  REALITY: ${reality_link}
+
 Notes:
   1. In Cloudflare, keep the ${DOMAIN} record proxied and enable gRPC.
   2. For REALITY, use the server IP or a separate DNS record that is not proxied by Cloudflare.
-  3. Re-run ./install.sh after changing .env to regenerate configs and restart the stack.
+  3. Re-run ./install.sh after changing .env to regenerate configs, client files, and restart the stack.
 EOF
 }
 
@@ -340,6 +448,7 @@ main() {
   generate_cloudflare_ips
   write_xray_config
   write_runtime_env
+  write_client_files
   ensure_nginx_stream_include
   write_nginx_configs "${tls_paths[0]}" "${tls_paths[1]}"
   restart_nginx

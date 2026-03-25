@@ -17,6 +17,7 @@
 - генерирует `UUID`, `x25519` ключи REALITY, `shortId` и `xhttp path`, если вы не задали их вручную
 - скачивает актуальные Cloudflare IP ranges
 - рендерит конфиги `xray` и `nginx`
+- генерирует готовые клиентские файлы и import links для `XHTTP` и `REALITY`
 - создает self-signed origin certificate для домена
 - поднимает контейнеры через `docker compose`
 
@@ -68,11 +69,10 @@ sudo bash ./install.sh
    - в Cloudflare включен `gRPC`
 4. Запускаете `sudo bash ./install.sh`.
 5. В конце получаете готовые клиентские параметры:
-   - `UUID`
-   - `XHTTP path`
-   - `REALITY public key`
-   - `REALITY shortId`
-   - endpoint для прямого REALITY-подключения
+   - import link для `XHTTP`
+   - import link для `REALITY`
+   - текстовые client profiles
+   - JSON-файлы с параметрами для ручной сборки профиля
 
 ## Файлы
 
@@ -117,10 +117,25 @@ CLOAK_PORT=18080
 - `/opt/xray_server/.env`
 - `/opt/xray_server/config/config.jsonc`
 - `/opt/xray_server/config/cloudflare-ips.conf`
+- `/opt/xray_server/client/xhttp.txt`
+- `/opt/xray_server/client/reality.txt`
+- `/opt/xray_server/client/xhttp-params.json`
+- `/opt/xray_server/client/reality-params.json`
 - `/opt/xray_server/certs/origin.crt`
 - `/opt/xray_server/certs/origin.key`
 - `/etc/nginx/conf.d/xray-http.conf`
 - `/etc/nginx/stream-conf.d/xray-stream.conf`
+
+## Где брать клиентские конфиги
+
+После `sudo bash ./install.sh` готовые файлы лежат в `/opt/xray_server/client`:
+
+- `xhttp.txt` - параметры и import link для `VLESS + XHTTP`
+- `reality.txt` - параметры и import link для `VLESS + REALITY + Vision`
+- `xhttp-params.json` - те же параметры в JSON-виде
+- `reality-params.json` - те же параметры в JSON-виде
+
+Установщик также печатает обе `vless://` ссылки прямо в конце выполнения.
 
 ## Повторный запуск
 
