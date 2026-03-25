@@ -6,30 +6,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${REPO_DIR}/.env"
 EXAMPLE_ENV_FILE="${REPO_DIR}/.env.example"
 
-if [[ -f "${ENV_FILE}" ]]; then
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-elif [[ -f "${EXAMPLE_ENV_FILE}" ]]; then
-  # shellcheck disable=SC1090
-  source "${EXAMPLE_ENV_FILE}"
-fi
-
-DOMAIN="${DOMAIN:-}"
-APP_DIR="${APP_DIR:-/opt/xray_server}"
-NGINX_HTTP_PORT="${NGINX_HTTP_PORT:-8443}"
-XRAY_XHTTP_PORT="${XRAY_XHTTP_PORT:-12777}"
-XRAY_REALITY_PORT="${XRAY_REALITY_PORT:-12888}"
-CLOAK_PORT="${CLOAK_PORT:-18080}"
-XRAY_REALITY_SERVER_NAME="${XRAY_REALITY_SERVER_NAME:-www.microsoft.com}"
-XRAY_REALITY_DEST="${XRAY_REALITY_DEST:-${XRAY_REALITY_SERVER_NAME}:443}"
-XRAY_UUID="${XRAY_UUID:-}"
-XRAY_XHTTP_PATH="${XRAY_XHTTP_PATH:-}"
-XRAY_REALITY_PRIVATE_KEY="${XRAY_REALITY_PRIVATE_KEY:-}"
-XRAY_REALITY_PUBLIC_KEY="${XRAY_REALITY_PUBLIC_KEY:-}"
-XRAY_REALITY_SHORT_ID="${XRAY_REALITY_SHORT_ID:-}"
-
 readonly REPO_DIR
-readonly APP_DIR
 
 log() {
   printf '[xray-server] %s\n' "$*"
@@ -46,7 +23,43 @@ require_root() {
   fi
 }
 
-ensure_domain() {
+load_env() {
+  if [[ -f "${ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${ENV_FILE}"
+  elif [[ -f "${EXAMPLE_ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${EXAMPLE_ENV_FILE}"
+  fi
+
+  DOMAIN="${DOMAIN:-}"
+  APP_DIR="${APP_DIR:-/opt/xray_server}"
+  NGINX_HTTP_PORT="${NGINX_HTTP_PORT:-8443}"
+  XRAY_XHTTP_PORT="${XRAY_XHTTP_PORT:-12777}"
+  XRAY_REALITY_PORT="${XRAY_REALITY_PORT:-12888}"
+  CLOAK_PORT="${CLOAK_PORT:-18080}"
+  XRAY_REALITY_SERVER_NAME="${XRAY_REALITY_SERVER_NAME:-www.microsoft.com}"
+  XRAY_REALITY_DEST="${XRAY_REALITY_DEST:-${XRAY_REALITY_SERVER_NAME}:443}"
+  XRAY_UUID="${XRAY_UUID:-}"
+  XRAY_XHTTP_PATH="${XRAY_XHTTP_PATH:-}"
+  XRAY_REALITY_PRIVATE_KEY="${XRAY_REALITY_PRIVATE_KEY:-}"
+  XRAY_REALITY_PUBLIC_KEY="${XRAY_REALITY_PUBLIC_KEY:-}"
+  XRAY_REALITY_SHORT_ID="${XRAY_REALITY_SHORT_ID:-}"
+}
+
+ensure_configured() {
+  if [[ -n "${DOMAIN}" ]]; then
+    return
+  fi
+
+  if [[ ! -t 0 ]]; then
+    fail "DOMAIN is not set. Run ./configure.sh first or create .env manually"
+  fi
+
+  log "DOMAIN is not set, launching interactive configuration wizard"
+  bash "${REPO_DIR}/configure.sh"
+  load_env
+
   [[ -n "${DOMAIN}" ]] || fail "set DOMAIN in .env before running install.sh"
 }
 
@@ -102,8 +115,7 @@ generate_xhttp_path() {
   if [[ -n "${XRAY_XHTTP_PATH}" ]]; then
     echo "${XRAY_XHTTP_PATH}"
   else
-    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16
-    printf '\n'
+    openssl rand -hex 8
   fi
 }
 
@@ -242,6 +254,7 @@ write_xray_config() {
 write_runtime_env() {
   cat >"${APP_DIR}/.env" <<EOF
 DOMAIN=${DOMAIN}
+APP_DIR=${APP_DIR}
 XRAY_UUID=${XRAY_UUID}
 XRAY_XHTTP_PATH=${XRAY_XHTTP_PATH}
 XRAY_REALITY_PRIVATE_KEY=${XRAY_REALITY_PRIVATE_KEY}
@@ -308,7 +321,8 @@ EOF
 
 main() {
   require_root
-  ensure_domain
+  load_env
+  ensure_configured
   ensure_base_packages
   ensure_nginx
   ensure_docker
