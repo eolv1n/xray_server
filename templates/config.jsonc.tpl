@@ -81,10 +81,9 @@
         ]
       },
       "streamSettings": {
-        "network": "xhttp",
-        "xhttpSettings": {
-          "mode": "stream-up",
-          "path": "__XRAY_XHTTP_PATH__"
+        "network": "grpc",
+        "grpcSettings": {
+          "serviceName": "__XRAY_GRPC_SERVICE_NAME__"
         }
       },
       "sniffing": {

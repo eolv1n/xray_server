@@ -17,6 +17,7 @@ fi
 DOMAIN="${DOMAIN:-}"
 XRAY_UUID="${XRAY_UUID:-}"
 XRAY_XHTTP_PATH="${XRAY_XHTTP_PATH:-}"
+XRAY_GRPC_SERVICE_NAME="${XRAY_GRPC_SERVICE_NAME:-}"
 XRAY_REALITY_PRIVATE_KEY="${XRAY_REALITY_PRIVATE_KEY:-}"
 XRAY_REALITY_PUBLIC_KEY="${XRAY_REALITY_PUBLIC_KEY:-}"
 XRAY_REALITY_SHORT_ID="${XRAY_REALITY_SHORT_ID:-}"
@@ -27,6 +28,7 @@ NGINX_HTTP_PORT="${NGINX_HTTP_PORT:-8443}"
 XRAY_XHTTP_PORT="${XRAY_XHTTP_PORT:-12777}"
 XRAY_REALITY_PORT="${XRAY_REALITY_PORT:-12888}"
 CLOAK_PORT="${CLOAK_PORT:-18080}"
+PANEL_PORT="${PANEL_PORT:-5000}"
 
 log() {
   printf '[xray-config] %s\n' "$*"
@@ -92,7 +94,7 @@ prompt_text() {
 
 prompt_domain() {
   while true; do
-    DOMAIN="$(prompt_text "1/8 Домен для XHTTP через Cloudflare" "${DOMAIN}" 1)"
+    DOMAIN="$(prompt_text "1/9 Домен для XHTTP через Cloudflare" "${DOMAIN}" 1)"
     if validate_domain "${DOMAIN}"; then
       return
     fi
@@ -102,7 +104,7 @@ prompt_domain() {
 
 prompt_reality_server_name() {
   while true; do
-    XRAY_REALITY_SERVER_NAME="$(prompt_text "2/8 SNI для REALITY" "${XRAY_REALITY_SERVER_NAME}" 1)"
+    XRAY_REALITY_SERVER_NAME="$(prompt_text "2/9 SNI для REALITY" "${XRAY_REALITY_SERVER_NAME}" 1)"
     if validate_domain "${XRAY_REALITY_SERVER_NAME}"; then
       return
     fi
@@ -112,7 +114,7 @@ prompt_reality_server_name() {
 
 prompt_reality_dest() {
   while true; do
-    XRAY_REALITY_DEST="$(prompt_text "3/8 DEST для REALITY" "${XRAY_REALITY_DEST}" 1)"
+    XRAY_REALITY_DEST="$(prompt_text "3/9 DEST для REALITY" "${XRAY_REALITY_DEST}" 1)"
     if validate_host_port "${XRAY_REALITY_DEST}"; then
       return
     fi
@@ -121,7 +123,7 @@ prompt_reality_dest() {
 }
 
 prompt_app_dir() {
-  APP_DIR="$(prompt_text "4/8 Каталог установки на сервере" "${APP_DIR}" 1)"
+  APP_DIR="$(prompt_text "4/9 Каталог установки на сервере" "${APP_DIR}" 1)"
 }
 
 prompt_port() {
@@ -140,10 +142,11 @@ prompt_port() {
 }
 
 prompt_ports() {
-  NGINX_HTTP_PORT="$(prompt_port "5/8 Локальный TLS-порт nginx" "${NGINX_HTTP_PORT}")"
-  XRAY_XHTTP_PORT="$(prompt_port "6/8 Локальный порт XHTTP inbound" "${XRAY_XHTTP_PORT}")"
-  XRAY_REALITY_PORT="$(prompt_port "7/8 Локальный порт REALITY inbound" "${XRAY_REALITY_PORT}")"
-  CLOAK_PORT="$(prompt_port "8/8 Локальный порт маскировочного сайта" "${CLOAK_PORT}")"
+  NGINX_HTTP_PORT="$(prompt_port "5/9 Локальный TLS-порт nginx" "${NGINX_HTTP_PORT}")"
+  XRAY_XHTTP_PORT="$(prompt_port "6/9 Локальный порт XHTTP inbound" "${XRAY_XHTTP_PORT}")"
+  XRAY_REALITY_PORT="$(prompt_port "7/9 Локальный порт REALITY inbound" "${XRAY_REALITY_PORT}")"
+  CLOAK_PORT="$(prompt_port "8/9 Локальный порт маскировочного сайта" "${CLOAK_PORT}")"
+  PANEL_PORT="$(prompt_port "9/9 Локальный порт веб-панели" "${PANEL_PORT}")"
 }
 
 prompt_optional_secret() {
@@ -159,6 +162,7 @@ DOMAIN=${DOMAIN}
 # Optional overrides. Leave empty to autogenerate.
 XRAY_UUID=${XRAY_UUID}
 XRAY_XHTTP_PATH=${XRAY_XHTTP_PATH}
+XRAY_GRPC_SERVICE_NAME=${XRAY_GRPC_SERVICE_NAME}
 XRAY_REALITY_PRIVATE_KEY=${XRAY_REALITY_PRIVATE_KEY}
 XRAY_REALITY_PUBLIC_KEY=${XRAY_REALITY_PUBLIC_KEY}
 XRAY_REALITY_SHORT_ID=${XRAY_REALITY_SHORT_ID}
@@ -173,6 +177,7 @@ NGINX_HTTP_PORT=${NGINX_HTTP_PORT}
 XRAY_XHTTP_PORT=${XRAY_XHTTP_PORT}
 XRAY_REALITY_PORT=${XRAY_REALITY_PORT}
 CLOAK_PORT=${CLOAK_PORT}
+PANEL_PORT=${PANEL_PORT}
 EOF
 }
 
@@ -208,7 +213,8 @@ EOF
   prompt_ports
 
   XRAY_UUID="$(prompt_optional_secret "Optional UUID override" "${XRAY_UUID}")"
-  XRAY_XHTTP_PATH="$(prompt_optional_secret "Optional XHTTP path override" "${XRAY_XHTTP_PATH}")"
+  XRAY_XHTTP_PATH="$(prompt_optional_secret "Optional CDN path override" "${XRAY_XHTTP_PATH}")"
+  XRAY_GRPC_SERVICE_NAME="$(prompt_optional_secret "Optional gRPC serviceName override" "${XRAY_GRPC_SERVICE_NAME}")"
   XRAY_REALITY_PRIVATE_KEY="$(prompt_optional_secret "Optional REALITY private key override" "${XRAY_REALITY_PRIVATE_KEY}")"
   XRAY_REALITY_PUBLIC_KEY="$(prompt_optional_secret "Optional REALITY public key override" "${XRAY_REALITY_PUBLIC_KEY}")"
   XRAY_REALITY_SHORT_ID="$(prompt_optional_secret "Optional REALITY shortId override" "${XRAY_REALITY_SHORT_ID}")"
