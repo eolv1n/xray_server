@@ -1,167 +1,146 @@
-# xray_server
+# silentbridge-xray
 
-Репозиторий поднимает Xray на Ubuntu VPS с максимально простым сценарием запуска:
+Репозиторий переводит стек на один основной сценарий:
 
-- `VLESS + XHTTP` через Cloudflare и домен
-- `VLESS + REALITY + Vision` напрямую на тот же сервер
-- хостовый `nginx` принимает `:443` и отправляет трафик:
-  - запросы с IP Cloudflare в ветку `XHTTP`
-  - остальной TCP-трафик в `REALITY`
-- `xray` и маскировочный сайт (`filebrowser`) работают в Docker
+- `VLESS + REALITY + Vision` на `443`
+- `Marzban` как панель управления
+- `Angie` как локальный HTTPS-фасад для сертификатов, маскировочной страницы и панели
+- без `XHTTP`
+- без Cloudflare-зависимости
+- без stream-развилки по source IP
+
+Архитектура опирается на подход `Akiyamov/xray-vps-setup`, но адаптирована под отдельные домены для edge и панели.
 
 ## Что уже автоматизировано
 
-- интерактивный `configure.sh` пошагово создает `.env`
-- `install.sh` сам вызывает `configure.sh`, если конфиг еще не подготовлен
-- скрипт ставит `docker` и `nginx-full`, если их нет
-- генерирует `UUID`, `x25519` ключи REALITY, `shortId` и `xhttp path`, если вы не задали их вручную
-- скачивает актуальные Cloudflare IP ranges
-- рендерит конфиги `xray` и `nginx`
-- генерирует готовые клиентские файлы и import links для `XHTTP` и `REALITY`
-- веб-панель для управления клиентами (добавление/удаление, генерация ключей, просмотр конфигураций)
-- создает self-signed origin certificate для домена
-- поднимает контейнеры через `docker compose`
+- `configure.sh` подготавливает `.env`
+- `install.sh` сам вызывает `configure.sh`, если конфиг еще не создан
+- установка `docker.io` и `docker compose v2`
+- генерация `UUID`, `x25519` ключей, `shortId`
+- генерация логина и пароля администратора `Marzban`
+- генерация скрытого dashboard path и subscription path
+- загрузка `Xray-core`
+- рендер `Angie`, `Marzban` и `Xray` конфигов
+- запуск стека через `docker compose`
 
 ## Что нужно заранее
 
 - Ubuntu 22.04+ или совместимый Debian-based VPS
-- домен, который уже указывает на IP сервера
-- запись домена для XHTTP должна быть включена через Cloudflare Proxy
-- в Cloudflare для домена нужно включить `gRPC`
-- входящий `443/tcp` должен быть открыт на сервере
+- открытые `80/tcp` и `443/tcp`
+- два домена, которые уже указывают на VPS:
+  - `EDGE_DOMAIN`, например `edge.silentbridge.com`
+  - `PANEL_DOMAIN`, например `app.silentbridge.com`
 
 ## Быстрый старт
 
 ```bash
-git clone <your-repo-url> xray_server
-cd xray_server
+git clone <your-repo-url> silentbridge-xray
+cd silentbridge-xray
 bash ./configure.sh
 sudo bash ./install.sh
 ```
 
-Если хотите вообще без отдельного шага, можно сразу выполнить:
+Или одним шагом:
 
 ```bash
 sudo bash ./install.sh
 ```
 
-Если `DOMAIN` еще не задан, установщик сам откроет интерактивный wizard и создаст `.env`.
-
-## Веб-панель управления
-
-После развертывания доступна веб-панель на порту 5000 (локально). Она позволяет:
-- Добавлять новых клиентов с автоматической генерацией UUID
-- Просматривать список клиентов
-- Удалять клиентов
-- Получать конфигурации подключения для XHTTP и REALITY
-- Автоматически обновлять `xray` конфиг и перезапускать контейнер
-
-Панель доступна по адресу: http://127.0.0.1:5000 и рассчитана на доступ через SSH tunnel или локальный reverse proxy.
-
 ## Что спрашивает configure.sh
 
-`configure.sh` пошагово спрашивает:
+`configure.sh` спрашивает:
 
-- домен для XHTTP через Cloudflare, например `vpn.example.com`
-- `SNI` для REALITY, по умолчанию `www.microsoft.com`
-- `DEST` для REALITY, по умолчанию `www.microsoft.com:443`
-- каталог установки на сервере
-- локальные порты `nginx`, `xray XHTTP`, `xray REALITY` и маскировочного сайта
-- необязательные overrides для `UUID`, `XHTTP path`, `REALITY private/public key`, `shortId`
+- домен для REALITY, например `edge.silentbridge.com`
+- домен панели, например `app.silentbridge.com`
+- каталог установки
+- образ `Marzban`
+- необязательные overrides для `UUID`, ключей, `shortId`, логина и пароля панели
 
-Если секретные поля оставить пустыми, `install.sh` сгенерирует их сам.
+Если секретные поля пустые, `install.sh` сгенерирует их автоматически.
 
 ## Как выглядит поток установки
 
 1. Клонируете репозиторий на сервер.
-2. Запускаете `bash ./configure.sh` и отвечаете на вопросы wizard.
-3. Проверяете DNS:
-   - домен указывает на IP VPS
-   - запись домена проксируется через Cloudflare
-   - в Cloudflare включен `gRPC`
+2. Запускаете `bash ./configure.sh`.
+3. Проверяете DNS для `EDGE_DOMAIN` и `PANEL_DOMAIN`.
 4. Запускаете `sudo bash ./install.sh`.
-5. В конце получаете готовые клиентские параметры:
-   - import link для `XHTTP`
-   - import link для `REALITY`
-   - текстовые client profiles
-   - JSON-файлы с параметрами для ручной сборки профиля
+5. Получаете:
+   - URL панели `Marzban`
+   - логин и пароль администратора
+   - `UUID`, `PBK`, `shortId`
+   - готовую `vless://` ссылку для клиента
 
 ## Файлы
 
-- `configure.sh` - интерактивный CLI для создания `.env`
-- `install.sh` - основной one-click установщик
-- `docker-compose.yml` - контейнеры `xray` и `filebrowser`
-- `templates/config.jsonc.tpl` - шаблон конфига `xray`
-- `templates/nginx-http.conf.tpl` - HTTP/TLS ветка для XHTTP и маскировки
-- `templates/nginx-stream.conf.tpl` - stream-маршрутизация по source IP
+- `configure.sh` - интерактивный генератор `.env`
+- `install.sh` - основной установщик
+- `docker-compose.yml` - контейнеры `Angie` и `Marzban`
+- `templates/angie.conf.tpl` - HTTPS-фасад и ACME
+- `templates/xray.json.tpl` - `REALITY` конфиг для `Marzban`
+- `templates/marzban.env.tpl` - переменные панели
+- `templates/mask.html.tpl` - маскировочная страница
 - `.env.example` - пример переменных окружения
 
 ## Переменные .env
 
-Обязательная:
+Обязательные:
 
 ```dotenv
-DOMAIN=vpn.example.com
+EDGE_DOMAIN=edge.example.com
+PANEL_DOMAIN=app.example.com
 ```
 
-Необязательные:
+Опциональные:
 
 ```dotenv
+APP_DIR=/opt/silentbridge
 XRAY_UUID=
-XRAY_XHTTP_PATH=
-XRAY_REALITY_PRIVATE_KEY=
-XRAY_REALITY_PUBLIC_KEY=
-XRAY_REALITY_SHORT_ID=
-XRAY_REALITY_SERVER_NAME=www.microsoft.com
-XRAY_REALITY_DEST=www.microsoft.com:443
-APP_DIR=/opt/xray_server
-NGINX_HTTP_PORT=8443
-XRAY_XHTTP_PORT=12777
-XRAY_REALITY_PORT=12888
-CLOAK_PORT=18080
+XRAY_PRIVATE_KEY=
+XRAY_PUBLIC_KEY=
+XRAY_SHORT_ID=
+MARZBAN_USER=
+MARZBAN_PASS=
+MARZBAN_DASHBOARD_PATH=
+MARZBAN_SUBSCRIPTION_PATH=
+XRAY_CORE_VERSION=26.2.6
+XRAY_IMAGE_TAG=26.3.27
+MARZBAN_IMAGE=gozargah/marzban:latest
 ```
 
 ## Где лежат результаты
 
 После установки рабочие файлы находятся здесь:
 
-- `/opt/xray_server/docker-compose.yml`
-- `/opt/xray_server/.env`
-- `/opt/xray_server/config/config.jsonc`
-- `/opt/xray_server/config/cloudflare-ips.conf`
-- `/opt/xray_server/client/xhttp.txt`
-- `/opt/xray_server/client/reality.txt`
-- `/opt/xray_server/client/xhttp-params.json`
-- `/opt/xray_server/client/reality-params.json`
-- `/opt/xray_server/certs/origin.crt`
-- `/opt/xray_server/certs/origin.key`
-- `/etc/nginx/conf.d/xray-http.conf`
-- `/etc/nginx/stream-conf.d/xray-stream.conf`
+- `/opt/silentbridge/docker-compose.yml`
+- `/opt/silentbridge/.env`
+- `/opt/silentbridge/angie.conf`
+- `/opt/silentbridge/marzban/.env`
+- `/opt/silentbridge/marzban/xray_config.json`
+- `/opt/silentbridge/xray-core`
+- `/opt/silentbridge/mask/index.html`
 
-## Где брать клиентские конфиги
+## Доступ к панели
 
-После `sudo bash ./install.sh` готовые файлы лежат в `/opt/xray_server/client`:
+После установки используйте URL:
 
-- `xhttp.txt` - параметры и import link для `VLESS + XHTTP`
-- `reality.txt` - параметры и import link для `VLESS + REALITY + Vision`
-- `xhttp-params.json` - те же параметры в JSON-виде
-- `reality-params.json` - те же параметры в JSON-виде
+```text
+https://PANEL_DOMAIN/MARZBAN_DASHBOARD_PATH/
+```
 
-Установщик также печатает обе `vless://` ссылки прямо в конце выполнения.
+Логин и пароль печатаются в конце `install.sh`.
 
 ## Повторный запуск
 
-Если вы поменяли `.env`, просто снова выполните:
+Если вы изменили `.env`, повторите:
 
 ```bash
 sudo bash ./install.sh
 ```
 
-Скрипт заново соберет конфиги, обновит Cloudflare IP ranges и перезапустит `nginx` и контейнеры.
+Установщик пересоберет конфиги и перезапустит стек.
 
 ## Важные замечания
 
-- Для REALITY обычно используют IP сервера или отдельную DNS-запись без Cloudflare Proxy.
-- Self-signed origin certificate подходит для режима Cloudflare `Full`.
-- Если у вас включен `Full (strict)`, лучше заменить сертификат на Cloudflare Origin Certificate или другой доверенный origin cert.
-- Если на сервере уже есть свой сложный `nginx`, скрипт добавит include для `/etc/nginx/stream-conf.d/*.conf` в `stream`-блок.
+- для новой схемы Cloudflare не требуется
+- `PANEL_DOMAIN` и `EDGE_DOMAIN` можно держать на одном IP
+- сертификаты выпускаются контейнером `Angie` через ACME после того, как оба домена резолвятся на VPS

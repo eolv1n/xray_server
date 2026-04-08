@@ -1,47 +1,25 @@
 services:
-  xray:
-    image: ghcr.io/xtls/xray-core:latest
-    container_name: xray-server
+  angie:
+    image: docker.angie.software/angie:minimal
+    container_name: silentbridge-angie
     restart: unless-stopped
-    command:
-      - run
-      - -config
-      - /etc/xray/config.jsonc
-    ports:
-      - "127.0.0.1:${XRAY_XHTTP_PORT:-12777}:777"
-      - "127.0.0.1:${XRAY_REALITY_PORT:-12888}:888"
+    network_mode: host
     volumes:
-      - ./config/config.jsonc:/etc/xray/config.jsonc:ro
-      - ./logs/xray:/var/log/xray
+      - angie-data:/var/lib/angie
+      - ./angie.conf:/etc/angie/angie.conf:ro
+      - ./mask:/opt/silentbridge/mask:ro
 
-  cloak:
-    image: filebrowser/filebrowser:latest
-    container_name: xray-cloak
+  marzban:
+    image: ${MARZBAN_IMAGE:-gozargah/marzban:latest}
+    container_name: silentbridge-marzban
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:${CLOAK_PORT:-18080}:80"
+    env_file: ./marzban/.env
+    network_mode: host
     volumes:
-      - ./data/filebrowser:/srv
+      - ./marzban/xray_config.json:/code/xray_config.json:ro
+      - ./xray-core:/var/lib/marzban/xray-core
+      - ./marzban_lib:/var/lib/marzban
 
-  panel:
-    build:
-      context: .
-      dockerfile: Dockerfile.panel
-    container_name: xray-panel
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${PANEL_PORT:-5000}:5000"
-    volumes:
-      - ./config:/app/config
-      - ./client:/app/client
-      - /var/run/docker.sock:/var/run/docker.sock
-    working_dir: /app
-    environment:
-      - DOMAIN=${DOMAIN}
-      - XRAY_XHTTP_PATH=${XRAY_XHTTP_PATH}
-      - XRAY_REALITY_PUBLIC_KEY=${XRAY_REALITY_PUBLIC_KEY}
-      - XRAY_REALITY_SHORT_ID=${XRAY_REALITY_SHORT_ID}
-      - XRAY_REALITY_SERVER_NAME=${XRAY_REALITY_SERVER_NAME}
-      - REALITY_ENDPOINT=${REALITY_ENDPOINT}
-    depends_on:
-      - xray
+volumes:
+  angie-data:
+    driver: local

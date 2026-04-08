@@ -9,18 +9,16 @@ EXAMPLE_ENV_FILE="${REPO_DIR}/.env.example"
 readonly REPO_DIR
 
 log() {
-  printf '[xray-server] %s\n' "$*"
+  printf '[silentbridge-install] %s\n' "$*"
 }
 
 fail() {
-  printf '[xray-server] error: %s\n' "$*" >&2
+  printf '[silentbridge-install] error: %s\n' "$*" >&2
   exit 1
 }
 
 require_root() {
-  if [[ "${EUID}" -ne 0 ]]; then
-    fail "run install.sh as root"
-  fi
+  [[ "${EUID}" -eq 0 ]] || fail "run install.sh as root"
 }
 
 load_env() {
@@ -32,37 +30,36 @@ load_env() {
     source "${EXAMPLE_ENV_FILE}"
   fi
 
-  DOMAIN="${DOMAIN:-}"
-  APP_DIR="${APP_DIR:-/opt/xray_server}"
-  NGINX_HTTP_PORT="${NGINX_HTTP_PORT:-8443}"
-  XRAY_XHTTP_PORT="${XRAY_XHTTP_PORT:-12777}"
-  XRAY_REALITY_PORT="${XRAY_REALITY_PORT:-12888}"
-  CLOAK_PORT="${CLOAK_PORT:-18080}"
-  PANEL_PORT="${PANEL_PORT:-5000}"
-  XRAY_REALITY_SERVER_NAME="${XRAY_REALITY_SERVER_NAME:-www.microsoft.com}"
-  XRAY_REALITY_DEST="${XRAY_REALITY_DEST:-${XRAY_REALITY_SERVER_NAME}:443}"
+  EDGE_DOMAIN="${EDGE_DOMAIN:-}"
+  PANEL_DOMAIN="${PANEL_DOMAIN:-}"
+  APP_DIR="${APP_DIR:-/opt/silentbridge}"
   XRAY_UUID="${XRAY_UUID:-}"
-  XRAY_XHTTP_PATH="${XRAY_XHTTP_PATH:-}"
-  XRAY_GRPC_SERVICE_NAME="${XRAY_GRPC_SERVICE_NAME:-}"
-  XRAY_REALITY_PRIVATE_KEY="${XRAY_REALITY_PRIVATE_KEY:-}"
-  XRAY_REALITY_PUBLIC_KEY="${XRAY_REALITY_PUBLIC_KEY:-}"
-  XRAY_REALITY_SHORT_ID="${XRAY_REALITY_SHORT_ID:-}"
+  XRAY_PRIVATE_KEY="${XRAY_PRIVATE_KEY:-}"
+  XRAY_PUBLIC_KEY="${XRAY_PUBLIC_KEY:-}"
+  XRAY_SHORT_ID="${XRAY_SHORT_ID:-}"
+  MARZBAN_USER="${MARZBAN_USER:-}"
+  MARZBAN_PASS="${MARZBAN_PASS:-}"
+  MARZBAN_DASHBOARD_PATH="${MARZBAN_DASHBOARD_PATH:-}"
+  MARZBAN_SUBSCRIPTION_PATH="${MARZBAN_SUBSCRIPTION_PATH:-}"
+  XRAY_CORE_VERSION="${XRAY_CORE_VERSION:-26.2.6}"
+  XRAY_IMAGE_TAG="${XRAY_IMAGE_TAG:-26.3.27}"
+  MARZBAN_IMAGE="${MARZBAN_IMAGE:-gozargah/marzban:latest}"
 }
 
 ensure_configured() {
-  if [[ -n "${DOMAIN}" ]]; then
+  if [[ -n "${EDGE_DOMAIN}" && -n "${PANEL_DOMAIN}" ]]; then
     return
   fi
 
   if [[ ! -t 0 ]]; then
-    fail "DOMAIN is not set. Run ./configure.sh first or create .env manually"
+    fail "EDGE_DOMAIN and PANEL_DOMAIN must be set. Run ./configure.sh first or create .env manually"
   fi
 
-  log "DOMAIN is not set, launching interactive configuration wizard"
+  log "launching interactive configuration wizard"
   bash "${REPO_DIR}/configure.sh"
   load_env
 
-  [[ -n "${DOMAIN}" ]] || fail "set DOMAIN in .env before running install.sh"
+  [[ -n "${EDGE_DOMAIN}" && -n "${PANEL_DOMAIN}" ]] || fail "set EDGE_DOMAIN and PANEL_DOMAIN in .env before running install.sh"
 }
 
 apt_install() {
@@ -72,84 +69,45 @@ apt_install() {
 ensure_base_packages() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt_install ca-certificates curl gnupg lsb-release openssl sed gawk uuid-runtime python3
-}
-
-ensure_nginx() {
-  if command -v nginx >/dev/null 2>&1; then
-    return
-  fi
-
-  log "installing nginx-full"
-  apt_install nginx-full
-  systemctl enable nginx
-}
-
-ensure_docker() {
-  if ! command -v docker >/dev/null 2>&1; then
-    log "installing docker"
-    curl -fsSL https://get.docker.com | sh
-    systemctl enable docker
-    systemctl start docker
-  fi
-
-  if docker compose version >/dev/null 2>&1; then
-    return
-  fi
-
-  log "installing docker compose v2"
-  apt_install docker-compose-v2
+  apt_install ca-certificates curl unzip openssl sed gawk uuid-runtime docker.io docker-compose-v2
+  systemctl enable docker
+  systemctl start docker
 }
 
 docker_compose_cmd() {
-  if docker compose version >/dev/null 2>&1; then
-    echo "docker compose"
-    return
-  fi
-
-  fail "docker compose plugin is missing"
+  docker compose version >/dev/null 2>&1 || fail "docker compose plugin is missing"
+  echo "docker compose"
 }
 
 generate_uuid() {
-  if [[ -n "${XRAY_UUID}" ]]; then
-    echo "${XRAY_UUID}"
-  else
-    cat /proc/sys/kernel/random/uuid
-  fi
-}
-
-generate_xhttp_path() {
-  if [[ -n "${XRAY_XHTTP_PATH}" ]]; then
-    echo "${XRAY_XHTTP_PATH}"
-  else
-    openssl rand -hex 8
-  fi
-}
-
-generate_grpc_service_name() {
-  if [[ -n "${XRAY_GRPC_SERVICE_NAME}" ]]; then
-    echo "${XRAY_GRPC_SERVICE_NAME}"
-  else
-    printf 'grpc-%s\n' "$(openssl rand -hex 8)"
-  fi
+  [[ -n "${XRAY_UUID}" ]] && printf '%s\n' "${XRAY_UUID}" || cat /proc/sys/kernel/random/uuid
 }
 
 generate_short_id() {
-  if [[ -n "${XRAY_REALITY_SHORT_ID}" ]]; then
-    echo "${XRAY_REALITY_SHORT_ID}"
-  else
-    openssl rand -hex 8
-  fi
+  [[ -n "${XRAY_SHORT_ID}" ]] && printf '%s\n' "${XRAY_SHORT_ID}" || openssl rand -hex 8
+}
+
+generate_secret_slug() {
+  openssl rand -hex 8
+}
+
+generate_password() {
+  openssl rand -hex 9
+  printf '\n'
+}
+
+generate_user() {
+  printf 'admin-%s\n' "$(openssl rand -hex 3)"
 }
 
 generate_reality_keys() {
-  if [[ -n "${XRAY_REALITY_PRIVATE_KEY}" && -n "${XRAY_REALITY_PUBLIC_KEY}" ]]; then
-    printf '%s\n%s\n' "${XRAY_REALITY_PRIVATE_KEY}" "${XRAY_REALITY_PUBLIC_KEY}"
+  if [[ -n "${XRAY_PRIVATE_KEY}" && -n "${XRAY_PUBLIC_KEY}" ]]; then
+    printf '%s\n%s\n' "${XRAY_PRIVATE_KEY}" "${XRAY_PUBLIC_KEY}"
     return
   fi
 
   local output private_key public_key
-  output="$(docker run --rm ghcr.io/xtls/xray-core:latest x25519)"
+  output="$(docker run --rm "ghcr.io/xtls/xray-core:${XRAY_IMAGE_TAG}" x25519)"
   private_key="$(printf '%s\n' "${output}" | awk -F': ' '/Private key:|PrivateKey:/ {print $2; exit}')"
   public_key="$(printf '%s\n' "${output}" | awk -F': ' '/Public key:|Password \\(PublicKey\\):/ {print $2; exit}')"
 
@@ -159,173 +117,89 @@ generate_reality_keys() {
 
 prepare_dirs() {
   install -d -m 0755 "${APP_DIR}"
-  install -d -m 0755 "${APP_DIR}/config"
-  install -d -m 0755 "${APP_DIR}/client"
-  install -d -m 0777 "${APP_DIR}/logs/xray"
-  install -d -m 0755 "${APP_DIR}/data/filebrowser"
-  install -d -m 0700 "${APP_DIR}/certs"
-}
-
-sync_repo_files() {
-  install -m 0644 "${REPO_DIR}/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
-  install -m 0644 "${REPO_DIR}/Dockerfile.panel" "${APP_DIR}/Dockerfile.panel"
-  install -m 0644 "${REPO_DIR}/panel.py" "${APP_DIR}/panel.py"
-  install -m 0644 "${REPO_DIR}/requirements.txt" "${APP_DIR}/requirements.txt"
-}
-
-generate_tls_cert() {
-  local cert_file key_file
-  cert_file="${APP_DIR}/certs/origin.crt"
-  key_file="${APP_DIR}/certs/origin.key"
-
-  if [[ ! -s "${cert_file}" || ! -s "${key_file}" ]]; then
-    log "generating self-signed origin certificate for ${DOMAIN}"
-    openssl req -x509 -nodes -newkey rsa:2048 \
-      -keyout "${key_file}" \
-      -out "${cert_file}" \
-      -days 3650 \
-      -subj "/CN=${DOMAIN}"
-  fi
-
-  printf '%s\n%s\n' "${cert_file}" "${key_file}"
+  install -d -m 0755 "${APP_DIR}/marzban"
+  install -d -m 0755 "${APP_DIR}/mask"
+  install -d -m 0755 "${APP_DIR}/xray-core"
+  install -d -m 0755 "${APP_DIR}/marzban_lib"
 }
 
 render_template() {
-  local template_file output_file
-  template_file="$1"
-  output_file="$2"
+  local template_file="$1"
+  local output_file="$2"
   shift 2
-
   sed "$@" "${template_file}" >"${output_file}"
 }
 
-generate_cloudflare_ips() {
-  local v4_file v6_file output_file
-  v4_file="$(mktemp)"
-  v6_file="$(mktemp)"
-  output_file="${APP_DIR}/config/cloudflare-ips.conf"
-
-  curl -fsSL https://www.cloudflare.com/ips-v4 -o "${v4_file}"
-  curl -fsSL https://www.cloudflare.com/ips-v6 -o "${v6_file}"
-
-  {
-    printf 'geo $remote_addr $is_cdn {\n'
-    printf '    default 0;\n'
-    awk '{printf "    %s 1;\n", $1}' "${v4_file}"
-    awk '{printf "    %s 1;\n", $1}' "${v6_file}"
-    printf '}\n'
-  } >"${output_file}"
-
-  rm -f "${v4_file}" "${v6_file}"
+sync_runtime_files() {
+  install -m 0644 "${REPO_DIR}/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
 }
 
-ensure_nginx_stream_include() {
-  local nginx_conf include_line
-  nginx_conf="/etc/nginx/nginx.conf"
-  include_line="include /etc/nginx/stream-conf.d/*.conf;"
+download_xray_core() {
+  local archive_name archive_url tmp_zip
 
-  install -d -m 0755 /etc/nginx/stream-conf.d
+  case "$(dpkg --print-architecture)" in
+    amd64) archive_name="Xray-linux-64.zip" ;;
+    arm64) archive_name="Xray-linux-arm64-v8a.zip" ;;
+    *) fail "unsupported architecture: $(dpkg --print-architecture)" ;;
+  esac
 
-  if grep -Fq "${include_line}" "${nginx_conf}"; then
-    return
-  fi
+  archive_url="https://github.com/XTLS/Xray-core/releases/download/v${XRAY_CORE_VERSION}/${archive_name}"
+  tmp_zip="$(mktemp)"
 
-  cp "${nginx_conf}" "${nginx_conf}.bak.$(date +%s)"
-  printf '\nstream {\n    %s\n}\n' "${include_line}" >>"${nginx_conf}"
+  log "downloading Xray-core v${XRAY_CORE_VERSION}"
+  curl -fsSL "${archive_url}" -o "${tmp_zip}"
+  rm -rf "${APP_DIR}/xray-core"/*
+  unzip -qo "${tmp_zip}" -d "${APP_DIR}/xray-core"
+  rm -f "${tmp_zip}"
 }
 
-write_nginx_configs() {
-  local cert_file key_file
-  cert_file="$1"
-  key_file="$2"
-
+write_configs() {
   render_template \
-    "${REPO_DIR}/templates/nginx-http.conf.tpl" \
-    "/etc/nginx/conf.d/xray-http.conf" \
-    -e "s|__DOMAIN__|${DOMAIN}|g" \
-    -e "s|__NGINX_HTTP_PORT__|${NGINX_HTTP_PORT}|g" \
-    -e "s|__XRAY_XHTTP_PATH__|${XRAY_XHTTP_PATH}|g" \
-    -e "s|__XRAY_XHTTP_PORT__|${XRAY_XHTTP_PORT}|g" \
-    -e "s|__CLOAK_PORT__|${CLOAK_PORT}|g" \
-    -e "s|__TLS_CERT__|${cert_file}|g" \
-    -e "s|__TLS_KEY__|${key_file}|g"
-
-  render_template \
-    "${REPO_DIR}/templates/nginx-stream.conf.tpl" \
-    "/etc/nginx/stream-conf.d/xray-stream.conf" \
-    -e "s|__APP_DIR__|${APP_DIR}|g" \
-    -e "s|__NGINX_HTTP_PORT__|${NGINX_HTTP_PORT}|g" \
-    -e "s|__XRAY_REALITY_PORT__|${XRAY_REALITY_PORT}|g"
-}
-
-write_xray_config() {
-  render_template \
-    "${REPO_DIR}/templates/config.jsonc.tpl" \
-    "${APP_DIR}/config/config.jsonc" \
+    "${REPO_DIR}/templates/xray.json.tpl" \
+    "${APP_DIR}/marzban/xray_config.json" \
     -e "s|__XRAY_UUID__|${XRAY_UUID}|g" \
-    -e "s|__XRAY_XHTTP_PATH__|${XRAY_XHTTP_PATH}|g" \
-    -e "s|__XRAY_GRPC_SERVICE_NAME__|${XRAY_GRPC_SERVICE_NAME}|g" \
-    -e "s|__XRAY_REALITY_DEST__|${XRAY_REALITY_DEST}|g" \
-    -e "s|__XRAY_REALITY_SERVER_NAME__|${XRAY_REALITY_SERVER_NAME}|g" \
-    -e "s|__XRAY_REALITY_PRIVATE_KEY__|${XRAY_REALITY_PRIVATE_KEY}|g" \
-    -e "s|__XRAY_REALITY_SHORT_ID__|${XRAY_REALITY_SHORT_ID}|g"
+    -e "s|__EDGE_DOMAIN__|${EDGE_DOMAIN}|g" \
+    -e "s|__PANEL_DOMAIN__|${PANEL_DOMAIN}|g" \
+    -e "s|__XRAY_PRIVATE_KEY__|${XRAY_PRIVATE_KEY}|g" \
+    -e "s|__XRAY_SHORT_ID__|${XRAY_SHORT_ID}|g"
+
+  render_template \
+    "${REPO_DIR}/templates/marzban.env.tpl" \
+    "${APP_DIR}/marzban/.env" \
+    -e "s|__MARZBAN_USER__|${MARZBAN_USER}|g" \
+    -e "s|__MARZBAN_PASS__|${MARZBAN_PASS}|g" \
+    -e "s|__MARZBAN_DASHBOARD_PATH__|${MARZBAN_DASHBOARD_PATH}|g" \
+    -e "s|__PANEL_DOMAIN__|${PANEL_DOMAIN}|g" \
+    -e "s|__MARZBAN_SUBSCRIPTION_PATH__|${MARZBAN_SUBSCRIPTION_PATH}|g"
+
+  render_template \
+    "${REPO_DIR}/templates/angie.conf.tpl" \
+    "${APP_DIR}/angie.conf" \
+    -e "s|__EDGE_DOMAIN__|${EDGE_DOMAIN}|g" \
+    -e "s|__PANEL_DOMAIN__|${PANEL_DOMAIN}|g" \
+    -e "s|__APP_DIR__|${APP_DIR}|g"
+
+  install -m 0644 "${REPO_DIR}/templates/mask.html.tpl" "${APP_DIR}/mask/index.html"
 }
 
 write_runtime_env() {
   cat >"${APP_DIR}/.env" <<EOF
-DOMAIN=${DOMAIN}
+EDGE_DOMAIN=${EDGE_DOMAIN}
+PANEL_DOMAIN=${PANEL_DOMAIN}
 APP_DIR=${APP_DIR}
 XRAY_UUID=${XRAY_UUID}
-XRAY_XHTTP_PATH=${XRAY_XHTTP_PATH}
-XRAY_GRPC_SERVICE_NAME=${XRAY_GRPC_SERVICE_NAME}
-XRAY_REALITY_PRIVATE_KEY=${XRAY_REALITY_PRIVATE_KEY}
-XRAY_REALITY_PUBLIC_KEY=${XRAY_REALITY_PUBLIC_KEY}
-XRAY_REALITY_SHORT_ID=${XRAY_REALITY_SHORT_ID}
-XRAY_REALITY_SERVER_NAME=${XRAY_REALITY_SERVER_NAME}
-XRAY_REALITY_DEST=${XRAY_REALITY_DEST}
-NGINX_HTTP_PORT=${NGINX_HTTP_PORT}
-XRAY_XHTTP_PORT=${XRAY_XHTTP_PORT}
-XRAY_REALITY_PORT=${XRAY_REALITY_PORT}
-CLOAK_PORT=${CLOAK_PORT}
-PANEL_PORT=${PANEL_PORT}
-REALITY_ENDPOINT=${REALITY_ENDPOINT}
+XRAY_PRIVATE_KEY=${XRAY_PRIVATE_KEY}
+XRAY_PUBLIC_KEY=${XRAY_PUBLIC_KEY}
+XRAY_SHORT_ID=${XRAY_SHORT_ID}
+MARZBAN_USER=${MARZBAN_USER}
+MARZBAN_PASS=${MARZBAN_PASS}
+MARZBAN_DASHBOARD_PATH=${MARZBAN_DASHBOARD_PATH}
+MARZBAN_SUBSCRIPTION_PATH=${MARZBAN_SUBSCRIPTION_PATH}
+XRAY_CORE_VERSION=${XRAY_CORE_VERSION}
+XRAY_IMAGE_TAG=${XRAY_IMAGE_TAG}
+MARZBAN_IMAGE=${MARZBAN_IMAGE}
 EOF
   chmod 0600 "${APP_DIR}/.env"
-}
-
-seed_clients_file() {
-  if [[ -s "${APP_DIR}/config/clients.json" ]]; then
-    return
-  fi
-
-  cat >"${APP_DIR}/config/clients.json" <<EOF
-[
-  {
-    "name": "default",
-    "uuid": "${XRAY_UUID}",
-    "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  }
-]
-EOF
-}
-
-sync_panel_state() {
-  XRAY_CONFIG_PATH="${APP_DIR}/config/config.jsonc" \
-  CLIENTS_FILE_PATH="${APP_DIR}/config/clients.json" \
-  CLIENT_OUTPUT_DIR="${APP_DIR}/client" \
-  DOMAIN="${DOMAIN}" \
-  XRAY_XHTTP_PATH="${XRAY_XHTTP_PATH}" \
-  XRAY_GRPC_SERVICE_NAME="${XRAY_GRPC_SERVICE_NAME}" \
-  XRAY_REALITY_PUBLIC_KEY="${XRAY_REALITY_PUBLIC_KEY}" \
-  XRAY_REALITY_SHORT_ID="${XRAY_REALITY_SHORT_ID}" \
-  XRAY_REALITY_SERVER_NAME="${XRAY_REALITY_SERVER_NAME}" \
-  REALITY_ENDPOINT="${REALITY_ENDPOINT}" \
-  python3 "${REPO_DIR}/panel.py" --sync-config
-}
-
-restart_nginx() {
-  nginx -t
-  systemctl restart nginx
 }
 
 start_stack() {
@@ -338,146 +212,40 @@ start_stack() {
   )
 }
 
-detect_reality_endpoint() {
-  hostname -I 2>/dev/null | awk '{print $1}'
-}
-
-build_xhttp_link() {
-  printf 'vless://%s@%s:443?encryption=none&security=tls&sni=%s&alpn=h2&type=grpc&serviceName=%s#xray-grpc\n' \
-    "${XRAY_UUID}" \
-    "${DOMAIN}" \
-    "${DOMAIN}" \
-    "${XRAY_GRPC_SERVICE_NAME}"
-}
-
-build_reality_link() {
-  local endpoint
-  endpoint="$1"
-
-  printf 'vless://%s@%s:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=chrome&pbk=%s&sid=%s&type=tcp#xray-reality\n' \
-    "${XRAY_UUID}" \
-    "${endpoint}" \
-    "${XRAY_REALITY_SERVER_NAME}" \
-    "${XRAY_REALITY_PUBLIC_KEY}" \
-    "${XRAY_REALITY_SHORT_ID}"
-}
-
-write_client_files() {
-  local endpoint xhttp_link reality_link xhttp_json reality_json
-  endpoint="$(detect_reality_endpoint || true)"
-  endpoint="${endpoint:-<server-ip>}"
-  xhttp_link="$(build_xhttp_link)"
-  reality_link="$(build_reality_link "${endpoint}")"
-
-  cat >"${APP_DIR}/client/xhttp.txt" <<EOF
-Type: VLESS + gRPC + TLS
-Address: ${DOMAIN}
-Port: 443
-UUID: ${XRAY_UUID}
-Security: tls
-SNI: ${DOMAIN}
-ALPN: h2
-Transport: grpc
-serviceName: ${XRAY_GRPC_SERVICE_NAME}
-
-Import link:
-${xhttp_link}
-EOF
-
-  cat >"${APP_DIR}/client/reality.txt" <<EOF
-Type: VLESS + REALITY + Vision
-Address: ${endpoint}
-Port: 443
-UUID: ${XRAY_UUID}
-Flow: xtls-rprx-vision
-Security: reality
-SNI: ${XRAY_REALITY_SERVER_NAME}
-Public key: ${XRAY_REALITY_PUBLIC_KEY}
-Short ID: ${XRAY_REALITY_SHORT_ID}
-Fingerprint: chrome
-
-Import link:
-${reality_link}
-EOF
-
-  xhttp_json="${APP_DIR}/client/xhttp-params.json"
-  cat >"${xhttp_json}" <<EOF
-{
-  "label": "xray-grpc",
-  "protocol": "vless",
-  "transport": "grpc",
-  "security": "tls",
-  "address": "${DOMAIN}",
-  "port": 443,
-  "uuid": "${XRAY_UUID}",
-  "sni": "${DOMAIN}",
-  "alpn": "h2",
-  "service_name": "${XRAY_GRPC_SERVICE_NAME}",
-  "import_link": "${xhttp_link}"
-}
-EOF
-
-  reality_json="${APP_DIR}/client/reality-params.json"
-  cat >"${reality_json}" <<EOF
-{
-  "label": "xray-reality",
-  "protocol": "vless",
-  "transport": "tcp",
-  "security": "reality",
-  "address": "${endpoint}",
-  "port": 443,
-  "uuid": "${XRAY_UUID}",
-  "flow": "xtls-rprx-vision",
-  "sni": "${XRAY_REALITY_SERVER_NAME}",
-  "public_key": "${XRAY_REALITY_PUBLIC_KEY}",
-  "short_id": "${XRAY_REALITY_SHORT_ID}",
-  "fingerprint": "chrome",
-  "import_link": "${reality_link}"
-}
-EOF
-}
-
 print_summary() {
-  local endpoint xhttp_link reality_link
-  endpoint="$(detect_reality_endpoint || true)"
-  endpoint="${endpoint:-<server-ip>}"
-  xhttp_link="$(build_xhttp_link)"
-  reality_link="$(build_reality_link "${endpoint}")"
-
   cat <<EOF
 
 Installation complete.
 
 Files:
   App directory: ${APP_DIR}
-  Xray config: ${APP_DIR}/config/config.jsonc
-  Nginx HTTP config: /etc/nginx/conf.d/xray-http.conf
-  Nginx stream config: /etc/nginx/stream-conf.d/xray-stream.conf
-  Panel URL: http://127.0.0.1:${PANEL_PORT}
-  CDN client profile: ${APP_DIR}/client/xhttp.txt
-  REALITY client profile: ${APP_DIR}/client/reality.txt
-  XHTTP params JSON: ${APP_DIR}/client/xhttp-params.json
-  REALITY params JSON: ${APP_DIR}/client/reality-params.json
+  Compose file: ${APP_DIR}/docker-compose.yml
+  Angie config: ${APP_DIR}/angie.conf
+  Marzban env: ${APP_DIR}/marzban/.env
+  Xray config: ${APP_DIR}/marzban/xray_config.json
 
-Client values:
-  Domain (XHTTP over CDN): ${DOMAIN}
+Domains:
+  REALITY / edge domain: ${EDGE_DOMAIN}
+  Marzban panel domain: ${PANEL_DOMAIN}
+
+Marzban:
+  Admin user: ${MARZBAN_USER}
+  Admin password: ${MARZBAN_PASS}
+  Dashboard path: /${MARZBAN_DASHBOARD_PATH}/
+  Subscription path: /${MARZBAN_SUBSCRIPTION_PATH}/
+
+REALITY:
   UUID: ${XRAY_UUID}
-  CDN path: /${XRAY_XHTTP_PATH}
-  gRPC serviceName: ${XRAY_GRPC_SERVICE_NAME}
-  REALITY endpoint: ${endpoint}
-  REALITY serverName/SNI: ${XRAY_REALITY_SERVER_NAME}
-  REALITY public key: ${XRAY_REALITY_PUBLIC_KEY}
-  REALITY shortId: ${XRAY_REALITY_SHORT_ID}
+  Public key: ${XRAY_PUBLIC_KEY}
+  Short ID: ${XRAY_SHORT_ID}
 
-Import links:
-  CDN gRPC: ${xhttp_link}
-  REALITY: ${reality_link}
+Client link:
+  vless://${XRAY_UUID}@${EDGE_DOMAIN}:443?type=tcp&security=reality&pbk=${XRAY_PUBLIC_KEY}&fp=chrome&sni=${EDGE_DOMAIN}&sid=${XRAY_SHORT_ID}&flow=xtls-rprx-vision#silentbridge-reality
 
 Notes:
-  1. In Cloudflare, keep the ${DOMAIN} record proxied and enable gRPC.
-  2. For REALITY, use the server IP or a separate DNS record that is not proxied by Cloudflare.
-  3. The web panel listens on 127.0.0.1:${PANEL_PORT}; use SSH tunnel or local reverse proxy for access.
-  4. Re-run ./install.sh after changing .env to regenerate configs, client files, and restart the stack.
+  1. First certificate issuance depends on both domains resolving to this VPS.
+  2. Open https://${PANEL_DOMAIN}/${MARZBAN_DASHBOARD_PATH}/ to reach the panel.
+  3. Re-run ./install.sh after changing .env to regenerate configs and restart the stack.
 EOF
 }
 
@@ -486,31 +254,22 @@ main() {
   load_env
   ensure_configured
   ensure_base_packages
-  ensure_nginx
-  ensure_docker
   prepare_dirs
-  sync_repo_files
+  sync_runtime_files
 
   XRAY_UUID="$(generate_uuid)"
-  XRAY_XHTTP_PATH="$(generate_xhttp_path)"
-  XRAY_GRPC_SERVICE_NAME="$(generate_grpc_service_name)"
-  XRAY_REALITY_SHORT_ID="$(generate_short_id)"
+  XRAY_SHORT_ID="$(generate_short_id)"
+  MARZBAN_USER="${MARZBAN_USER:-$(generate_user)}"
+  MARZBAN_PASS="${MARZBAN_PASS:-$(generate_password)}"
+  MARZBAN_DASHBOARD_PATH="${MARZBAN_DASHBOARD_PATH:-$(generate_secret_slug)}"
+  MARZBAN_SUBSCRIPTION_PATH="${MARZBAN_SUBSCRIPTION_PATH:-$(generate_secret_slug)}"
   mapfile -t reality_keys < <(generate_reality_keys)
-  XRAY_REALITY_PRIVATE_KEY="${reality_keys[0]}"
-  XRAY_REALITY_PUBLIC_KEY="${reality_keys[1]}"
-  REALITY_ENDPOINT="$(detect_reality_endpoint || true)"
-  REALITY_ENDPOINT="${REALITY_ENDPOINT:-<server-ip>}"
+  XRAY_PRIVATE_KEY="${reality_keys[0]}"
+  XRAY_PUBLIC_KEY="${reality_keys[1]}"
 
-  mapfile -t tls_paths < <(generate_tls_cert)
-  generate_cloudflare_ips
-  write_xray_config
+  download_xray_core
+  write_configs
   write_runtime_env
-  seed_clients_file
-  sync_panel_state
-  write_client_files
-  ensure_nginx_stream_include
-  write_nginx_configs "${tls_paths[0]}" "${tls_paths[1]}"
-  restart_nginx
   start_stack
   print_summary
 }
