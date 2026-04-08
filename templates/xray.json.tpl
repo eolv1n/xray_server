@@ -9,24 +9,17 @@
       "port": 443,
       "protocol": "vless",
       "settings": {
-        "clients": [
-          {
-            "id": "__XRAY_UUID__",
-            "email": "default",
-            "flow": "xtls-rprx-vision"
-          }
-        ],
+        "clients": [],
         "decryption": "none"
       },
       "streamSettings": {
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "xver": 1,
-          "dest": "127.0.0.1:4123",
+          "xver": 0,
+          "dest": "__REALITY_DEST__",
           "serverNames": [
-            "__EDGE_DOMAIN__",
-            "__PANEL_DOMAIN__"
+            "__REALITY_SERVER_NAME__"
           ],
           "privateKey": "__XRAY_PRIVATE_KEY__",
           "shortIds": [

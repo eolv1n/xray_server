@@ -22,6 +22,7 @@
 - загрузка `Xray-core`
 - рендер `Angie`, `Marzban` и `Xray` конфигов
 - запуск стека через `docker compose`
+- базовая защита панели через `PANEL_ALLOWLIST`
 
 ## Что нужно заранее
 
@@ -95,7 +96,7 @@ PANEL_DOMAIN=panel.example.net
 Опциональные:
 
 ```dotenv
-APP_DIR=/opt/xray_panel
+APP_DIR=/opt/silentbridge
 XRAY_UUID=
 XRAY_PRIVATE_KEY=
 XRAY_PUBLIC_KEY=
@@ -104,6 +105,7 @@ MARZBAN_USER=
 MARZBAN_PASS=
 MARZBAN_DASHBOARD_PATH=
 MARZBAN_SUBSCRIPTION_PATH=
+PANEL_ALLOWLIST=127.0.0.1/32
 XRAY_CORE_VERSION=26.2.6
 XRAY_IMAGE_TAG=26.3.27
 MARZBAN_IMAGE=gozargah/marzban:latest
@@ -113,13 +115,13 @@ MARZBAN_IMAGE=gozargah/marzban:latest
 
 После установки рабочие файлы находятся здесь:
 
-- `/opt/xray_panel/docker-compose.yml`
-- `/opt/xray_panel/.env`
-- `/opt/xray_panel/angie.conf`
-- `/opt/xray_panel/marzban/.env`
-- `/opt/xray_panel/marzban/xray_config.json`
-- `/opt/xray_panel/xray-core`
-- `/opt/xray_panel/mask/index.html`
+- `/opt/silentbridge/docker-compose.yml`
+- `/opt/silentbridge/.env`
+- `/opt/silentbridge/angie.conf`
+- `/opt/silentbridge/marzban/.env`
+- `/opt/silentbridge/marzban/xray_config.json`
+- `/opt/silentbridge/xray-core`
+- `/opt/silentbridge/mask/index.html`
 
 ## Доступ к панели
 
@@ -130,6 +132,8 @@ https://PANEL_DOMAIN/MARZBAN_DASHBOARD_PATH/
 ```
 
 Логин и пароль печатаются в конце `install.sh`.
+
+По умолчанию панель ограничена через `PANEL_ALLOWLIST`, а root-path панели не индексируется и не отдается наружу.
 
 ## Повторный запуск
 
@@ -161,3 +165,4 @@ bash ./install-subscription-assets.sh
 - для новой схемы Cloudflare не требуется
 - `PANEL_DOMAIN` и `EDGE_DOMAIN` можно держать на одном IP
 - сертификаты выпускаются контейнером `Angie` через ACME после того, как оба домена резолвятся на VPS
+- security baseline и рекомендации по `ufw` и SSH ограничению описаны в `SECURITY.md`

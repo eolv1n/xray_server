@@ -28,7 +28,7 @@ load_env() {
     source "${EXAMPLE_ENV_FILE}"
   fi
 
-  APP_DIR="${APP_DIR:-/opt/xray_panel}"
+  APP_DIR="${APP_DIR:-/opt/silentbridge}"
   PANEL_DOMAIN="${PANEL_DOMAIN:-}"
   SUB_SUPPORT_URL="${SUB_SUPPORT_URL:-}"
 }
