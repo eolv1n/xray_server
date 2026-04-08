@@ -79,6 +79,8 @@ sudo bash ./install.sh
 - `templates/xray.json.tpl` - `REALITY` конфиг для `Marzban`
 - `templates/marzban.env.tpl` - переменные панели
 - `templates/mask.html.tpl` - маскировочная страница
+- `templates/subscription-index.html.tpl` - локальный subscription page template
+- `install-subscription-assets.sh` - установщик subscription templates и client templates
 - `.env.example` - пример переменных окружения
 
 ## Переменные .env
@@ -138,6 +140,21 @@ sudo bash ./install.sh
 ```
 
 Установщик пересоберет конфиги и перезапустит стек.
+
+## Subscription Templates
+
+Если хотите установить или обновить subscription page и шаблоны для клиентов без полного reinstall, используйте:
+
+```bash
+bash ./install-subscription-assets.sh
+```
+
+Скрипт аккуратно переносит идею `marz-sub.sh` в ваш репозиторий:
+
+- ставит локальный polished template по умолчанию
+- умеет подтянуть альтернативные templates по HTTPS
+- обновляет `Marzban` env только по нужным ключам
+- не требует запуска удаленного shell-скрипта напрямую
 
 ## Важные замечания
 
