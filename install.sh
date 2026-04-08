@@ -21,6 +21,10 @@ require_root() {
   [[ "${EUID}" -eq 0 ]] || fail "run install.sh as root"
 }
 
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "required command is missing: $1"
+}
+
 load_env() {
   if [[ -f "${ENV_FILE}" ]]; then
     # shellcheck disable=SC1090
@@ -62,6 +66,18 @@ ensure_configured() {
   [[ -n "${EDGE_DOMAIN}" && -n "${PANEL_DOMAIN}" ]] || fail "set EDGE_DOMAIN and PANEL_DOMAIN in .env before running install.sh"
 }
 
+confirm() {
+  local prompt="$1"
+  local answer
+
+  if [[ ! -t 0 ]]; then
+    return 1
+  fi
+
+  read -r -p "${prompt} [y/N]: " answer
+  [[ "${answer,,}" == "y" ]]
+}
+
 apt_install() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
 }
@@ -69,7 +85,7 @@ apt_install() {
 ensure_base_packages() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt_install ca-certificates curl unzip openssl sed gawk uuid-runtime docker.io docker-compose-v2
+  apt_install ca-certificates curl unzip openssl sed gawk uuid-runtime docker.io docker-compose-v2 dnsutils
   systemctl enable docker
   systemctl start docker
 }
@@ -77,6 +93,74 @@ ensure_base_packages() {
 docker_compose_cmd() {
   docker compose version >/dev/null 2>&1 || fail "docker compose plugin is missing"
   echo "docker compose"
+}
+
+resolve_ipv4() {
+  getent ahostsv4 "$1" 2>/dev/null | awk '/STREAM/ {print $1; exit}'
+}
+
+server_ipv4() {
+  hostname -I 2>/dev/null | awk '{print $1}'
+}
+
+check_domain_points_to_server() {
+  local domain="$1"
+  local resolved_ip server_ip
+
+  resolved_ip="$(resolve_ipv4 "${domain}" || true)"
+  server_ip="$(server_ipv4 || true)"
+
+  [[ -n "${server_ip}" ]] || fail "could not detect server IPv4 address"
+
+  if [[ -z "${resolved_ip}" ]]; then
+    log "warning: ${domain} has no resolvable IPv4 yet"
+    if confirm "continue without IPv4 DNS confirmation for ${domain}?"; then
+      return
+    fi
+    fail "DNS for ${domain} is not ready"
+  fi
+
+  if [[ "${resolved_ip}" != "${server_ip}" ]]; then
+    log "warning: ${domain} resolves to ${resolved_ip}, but this server is ${server_ip}"
+    if confirm "continue anyway with mismatched DNS for ${domain}?"; then
+      return
+    fi
+    fail "DNS mismatch for ${domain}"
+  fi
+}
+
+check_port_available() {
+  local port="$1"
+  local app_dir="${2:-}"
+  local listeners
+
+  listeners="$(ss -ltnp "( sport = :${port} )" 2>/dev/null | sed -n '2,120p' || true)"
+  [[ -z "${listeners}" ]] && return
+
+  if [[ -n "${app_dir}" ]]; then
+    if printf '%s\n' "${listeners}" | grep -Fq "${app_dir}"; then
+      return
+    fi
+    if printf '%s\n' "${listeners}" | grep -Eq 'docker-proxy|xray|angie|marzban'; then
+      log "port ${port} is already in use by an existing stack"
+      return
+    fi
+  fi
+
+  printf '%s\n' "${listeners}" >&2
+  fail "port ${port} is already busy"
+}
+
+ensure_runtime_prereqs() {
+  require_command ss
+  require_command curl
+  require_command docker
+  require_command getent
+
+  check_domain_points_to_server "${EDGE_DOMAIN}"
+  check_domain_points_to_server "${PANEL_DOMAIN}"
+  check_port_available 80 "${APP_DIR}"
+  check_port_available 443 "${APP_DIR}"
 }
 
 generate_uuid() {
@@ -108,8 +192,8 @@ generate_reality_keys() {
 
   local output private_key public_key
   output="$(docker run --rm "ghcr.io/xtls/xray-core:${XRAY_IMAGE_TAG}" x25519)"
-  private_key="$(printf '%s\n' "${output}" | awk -F': ' '/Private key:|PrivateKey:/ {print $2; exit}')"
-  public_key="$(printf '%s\n' "${output}" | awk -F': ' '/Public key:|Password \\(PublicKey\\):/ {print $2; exit}')"
+  private_key="$(printf '%s\n' "${output}" | sed -nE 's/^Private(Key| key):[[:space:]]*//p' | head -n 1)"
+  public_key="$(printf '%s\n' "${output}" | sed -nE 's/^(Public key|Password \(PublicKey\)):[[:space:]]*//p' | head -n 1)"
 
   [[ -n "${private_key}" && -n "${public_key}" ]] || fail "failed to generate REALITY keys"
   printf '%s\n%s\n' "${private_key}" "${public_key}"
@@ -121,6 +205,8 @@ prepare_dirs() {
   install -d -m 0755 "${APP_DIR}/mask"
   install -d -m 0755 "${APP_DIR}/xray-core"
   install -d -m 0755 "${APP_DIR}/marzban_lib"
+  install -d -m 0755 "${APP_DIR}/marzban_lib/templates"
+  install -d -m 0755 "${APP_DIR}/marzban_lib/templates/subscription"
 }
 
 render_template() {
@@ -132,6 +218,21 @@ render_template() {
 
 sync_runtime_files() {
   install -m 0644 "${REPO_DIR}/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
+}
+
+warn_if_legacy_app_dir_exists() {
+  local legacy_app_dir="/opt/silentbridge"
+
+  if [[ "${APP_DIR}" == "${legacy_app_dir}" ]]; then
+    return
+  fi
+
+  if [[ -d "${legacy_app_dir}" && ! -L "${legacy_app_dir}" ]]; then
+    log "legacy install directory detected at ${legacy_app_dir}"
+    if [[ ! -d "${APP_DIR}" || -z "$(find "${APP_DIR}" -mindepth 1 -maxdepth 1 2>/dev/null)" ]]; then
+      log "current install directory is ${APP_DIR}; review whether you want to migrate files before re-running install.sh"
+    fi
+  fi
 }
 
 download_xray_core() {
@@ -180,6 +281,7 @@ write_configs() {
     -e "s|__APP_DIR__|${APP_DIR}|g"
 
   install -m 0644 "${REPO_DIR}/templates/mask.html.tpl" "${APP_DIR}/mask/index.html"
+  install -m 0644 "${REPO_DIR}/templates/subscription-index.html.tpl" "${APP_DIR}/marzban_lib/templates/subscription/index.html"
 }
 
 write_runtime_env() {
@@ -210,6 +312,18 @@ start_stack() {
     ${compose_cmd} pull
     ${compose_cmd} up -d
   )
+}
+
+show_post_install_checks() {
+  cat <<EOF
+
+Recommended checks:
+  docker ps
+  docker logs --tail 50 xray-angie
+  docker logs --tail 50 xray-marzban
+  curl -kI https://${EDGE_DOMAIN}
+  curl -kI https://${PANEL_DOMAIN}
+EOF
 }
 
 print_summary() {
@@ -254,6 +368,8 @@ main() {
   load_env
   ensure_configured
   ensure_base_packages
+  ensure_runtime_prereqs
+  warn_if_legacy_app_dir_exists
   prepare_dirs
   sync_runtime_files
 
@@ -272,6 +388,7 @@ main() {
   write_runtime_env
   start_stack
   print_summary
+  show_post_install_checks
 }
 
 main "$@"

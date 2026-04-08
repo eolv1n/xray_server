@@ -90,7 +90,7 @@ http {
         resolver_timeout           2s;
 
         location / {
-            proxy_pass                         http://127.0.0.1:8000;
+            proxy_pass                         http://unix:/var/lib/marzban/marzban.socket:/;
             proxy_http_version                 1.1;
             proxy_set_header Host              $host;
             proxy_set_header X-Real-IP         $proxy_protocol_addr;
