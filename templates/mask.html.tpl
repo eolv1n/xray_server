@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Silentbridge Workspace</title>
+  <title>Workspace</title>
   <style>
     body {
       margin: 0;
@@ -41,7 +41,7 @@
 </head>
 <body>
   <main class="card">
-    <h1>Silentbridge Workspace</h1>
+    <h1>Workspace</h1>
     <p>This endpoint is available and serving TLS correctly. Access is managed internally.</p>
   </main>
 </body>

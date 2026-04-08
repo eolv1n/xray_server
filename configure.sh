@@ -16,7 +16,7 @@ fi
 
 EDGE_DOMAIN="${EDGE_DOMAIN:-}"
 PANEL_DOMAIN="${PANEL_DOMAIN:-}"
-APP_DIR="${APP_DIR:-/opt/silentbridge}"
+APP_DIR="${APP_DIR:-/opt/xray_panel}"
 XRAY_UUID="${XRAY_UUID:-}"
 XRAY_PRIVATE_KEY="${XRAY_PRIVATE_KEY:-}"
 XRAY_PUBLIC_KEY="${XRAY_PUBLIC_KEY:-}"
@@ -30,11 +30,11 @@ XRAY_IMAGE_TAG="${XRAY_IMAGE_TAG:-26.3.27}"
 MARZBAN_IMAGE="${MARZBAN_IMAGE:-gozargah/marzban:latest}"
 
 log() {
-  printf '[silentbridge-config] %s\n' "$*"
+  printf '[xray-config] %s\n' "$*"
 }
 
 fail() {
-  printf '[silentbridge-config] error: %s\n' "$*" >&2
+  printf '[xray-config] error: %s\n' "$*" >&2
   exit 1
 }
 
@@ -90,7 +90,7 @@ prompt_domain_value() {
       printf '%s' "${value}"
       return
     fi
-    log "enter a valid domain like edge.example.com"
+    log "enter a valid domain like edge.example.net"
   done
 }
 
@@ -121,7 +121,7 @@ main() {
   require_tty
 
   cat <<'EOF'
-This wizard prepares the .env file for the Silentbridge stack.
+This wizard prepares the .env file for the Xray + Marzban stack.
 Press Enter to keep the suggested value shown in brackets.
 Leave secret fields empty to let install.sh generate them automatically.
 EOF

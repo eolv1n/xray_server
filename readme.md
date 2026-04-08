@@ -1,4 +1,4 @@
-# silentbridge-xray
+# xray_server
 
 Репозиторий переводит стек на один основной сценарий:
 
@@ -28,14 +28,14 @@
 - Ubuntu 22.04+ или совместимый Debian-based VPS
 - открытые `80/tcp` и `443/tcp`
 - два домена, которые уже указывают на VPS:
-  - `EDGE_DOMAIN`, например `edge.silentbridge.com`
-  - `PANEL_DOMAIN`, например `app.silentbridge.com`
+  - `EDGE_DOMAIN`, например `edge.example.net`
+  - `PANEL_DOMAIN`, например `panel.example.net`
 
 ## Быстрый старт
 
 ```bash
-git clone <your-repo-url> silentbridge-xray
-cd silentbridge-xray
+git clone <your-repo-url> xray_server
+cd xray_server
 bash ./configure.sh
 sudo bash ./install.sh
 ```
@@ -50,8 +50,8 @@ sudo bash ./install.sh
 
 `configure.sh` спрашивает:
 
-- домен для REALITY, например `edge.silentbridge.com`
-- домен панели, например `app.silentbridge.com`
+- домен для REALITY, например `edge.example.net`
+- домен панели, например `panel.example.net`
 - каталог установки
 - образ `Marzban`
 - необязательные overrides для `UUID`, ключей, `shortId`, логина и пароля панели
@@ -86,14 +86,14 @@ sudo bash ./install.sh
 Обязательные:
 
 ```dotenv
-EDGE_DOMAIN=edge.example.com
-PANEL_DOMAIN=app.example.com
+EDGE_DOMAIN=edge.example.net
+PANEL_DOMAIN=panel.example.net
 ```
 
 Опциональные:
 
 ```dotenv
-APP_DIR=/opt/silentbridge
+APP_DIR=/opt/xray_panel
 XRAY_UUID=
 XRAY_PRIVATE_KEY=
 XRAY_PUBLIC_KEY=
@@ -111,13 +111,13 @@ MARZBAN_IMAGE=gozargah/marzban:latest
 
 После установки рабочие файлы находятся здесь:
 
-- `/opt/silentbridge/docker-compose.yml`
-- `/opt/silentbridge/.env`
-- `/opt/silentbridge/angie.conf`
-- `/opt/silentbridge/marzban/.env`
-- `/opt/silentbridge/marzban/xray_config.json`
-- `/opt/silentbridge/xray-core`
-- `/opt/silentbridge/mask/index.html`
+- `/opt/xray_panel/docker-compose.yml`
+- `/opt/xray_panel/.env`
+- `/opt/xray_panel/angie.conf`
+- `/opt/xray_panel/marzban/.env`
+- `/opt/xray_panel/marzban/xray_config.json`
+- `/opt/xray_panel/xray-core`
+- `/opt/xray_panel/mask/index.html`
 
 ## Доступ к панели
 

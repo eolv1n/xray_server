@@ -31,7 +31,7 @@ http {
 
     resolver 1.1.1.1;
 
-    acme_client silentbridge https://acme-v02.api.letsencrypt.org/directory;
+    acme_client panel https://acme-v02.api.letsencrypt.org/directory;
 
     server {
         listen                  127.0.0.1:4123 ssl default_server;
@@ -50,9 +50,9 @@ http {
 
         server_name                __EDGE_DOMAIN__;
 
-        acme silentbridge;
-        ssl_certificate            $acme_cert_silentbridge;
-        ssl_certificate_key        $acme_cert_key_silentbridge;
+        acme panel;
+        ssl_certificate            $acme_cert_panel;
+        ssl_certificate_key        $acme_cert_key_panel;
 
         ssl_protocols              TLSv1.2 TLSv1.3;
         ssl_ciphers                TLS13_AES_128_GCM_SHA256:TLS13_AES_256_GCM_SHA384:TLS13_CHACHA20_POLY1305_SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305;
@@ -77,9 +77,9 @@ http {
 
         server_name                __PANEL_DOMAIN__;
 
-        acme silentbridge;
-        ssl_certificate            $acme_cert_silentbridge;
-        ssl_certificate_key        $acme_cert_key_silentbridge;
+        acme panel;
+        ssl_certificate            $acme_cert_panel;
+        ssl_certificate_key        $acme_cert_key_panel;
 
         ssl_protocols              TLSv1.2 TLSv1.3;
         ssl_ciphers                TLS13_AES_128_GCM_SHA256:TLS13_AES_256_GCM_SHA384:TLS13_CHACHA20_POLY1305_SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305;

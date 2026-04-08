@@ -1,17 +1,17 @@
 services:
   angie:
     image: docker.angie.software/angie:minimal
-    container_name: silentbridge-angie
+    container_name: xray-angie
     restart: unless-stopped
     network_mode: host
     volumes:
       - angie-data:/var/lib/angie
       - ./angie.conf:/etc/angie/angie.conf:ro
-      - ./mask:/opt/silentbridge/mask:ro
+      - ./mask:/opt/xray_panel/mask:ro
 
   marzban:
     image: ${MARZBAN_IMAGE:-gozargah/marzban:latest}
-    container_name: silentbridge-marzban
+    container_name: xray-marzban
     restart: unless-stopped
     env_file: ./marzban/.env
     network_mode: host

@@ -9,11 +9,11 @@ EXAMPLE_ENV_FILE="${REPO_DIR}/.env.example"
 readonly REPO_DIR
 
 log() {
-  printf '[silentbridge-install] %s\n' "$*"
+  printf '[xray-install] %s\n' "$*"
 }
 
 fail() {
-  printf '[silentbridge-install] error: %s\n' "$*" >&2
+  printf '[xray-install] error: %s\n' "$*" >&2
   exit 1
 }
 
@@ -32,7 +32,7 @@ load_env() {
 
   EDGE_DOMAIN="${EDGE_DOMAIN:-}"
   PANEL_DOMAIN="${PANEL_DOMAIN:-}"
-  APP_DIR="${APP_DIR:-/opt/silentbridge}"
+  APP_DIR="${APP_DIR:-/opt/xray_panel}"
   XRAY_UUID="${XRAY_UUID:-}"
   XRAY_PRIVATE_KEY="${XRAY_PRIVATE_KEY:-}"
   XRAY_PUBLIC_KEY="${XRAY_PUBLIC_KEY:-}"
@@ -240,7 +240,7 @@ REALITY:
   Short ID: ${XRAY_SHORT_ID}
 
 Client link:
-  vless://${XRAY_UUID}@${EDGE_DOMAIN}:443?type=tcp&security=reality&pbk=${XRAY_PUBLIC_KEY}&fp=chrome&sni=${EDGE_DOMAIN}&sid=${XRAY_SHORT_ID}&flow=xtls-rprx-vision#silentbridge-reality
+  vless://${XRAY_UUID}@${EDGE_DOMAIN}:443?type=tcp&security=reality&pbk=${XRAY_PUBLIC_KEY}&fp=chrome&sni=${EDGE_DOMAIN}&sid=${XRAY_SHORT_ID}&flow=xtls-rprx-vision#reality-main
 
 Notes:
   1. First certificate issuance depends on both domains resolving to this VPS.
