@@ -423,7 +423,7 @@ Files:
 Domains:
   Domain: ${DOMAIN}
   REALITY SNI: ${DOMAIN}
-  REALITY fallback dest: 127.0.0.1:4123
+  REALITY dest: 127.0.0.1:4123
 
 Marzban:
   Admin user: ${MARZBAN_USER}

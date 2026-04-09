@@ -90,7 +90,7 @@ prompt_domain_value() {
       printf '%s' "${value}"
       return
     fi
-    log "enter a valid domain like edge.example.net"
+    log "enter a valid domain like vpn.example.net"
   done
 }
 
