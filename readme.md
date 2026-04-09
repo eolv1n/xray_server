@@ -43,6 +43,24 @@
 - открытые `80/tcp` и `443/tcp`
 - один домен, который уже указывает на VPS
 
+Если сервер совсем чистый, можно сначала прогнать bootstrap-скрипт:
+
+```bash
+sudo bash ./bootstrap-server.sh
+```
+
+Он:
+
+- обновляет систему
+- создает sudo-пользователя
+- ставит `git`, `curl`, `docker`, `docker compose`, `ufw`, `fail2ban`
+- отключает root login по SSH
+- оставляет парольный SSH только для нового пользователя
+- открывает в `ufw` только `22`, `80`, `443`
+
+Это именно базовая подготовка сервера перед клоном и установкой репозитория.
+SSH-ключ лучше добавить сразу после этого и только потом отключать `PasswordAuthentication`.
+
 Пример:
 
 ```dotenv
@@ -64,6 +82,8 @@ vpn.example.net -> <IP_вашего_VPS>
 
 ## Быстрый старт
 
+Если VPS уже подготовлен:
+
 ```bash
 git clone <your-repo-url> xray_server
 cd xray_server
@@ -75,6 +95,15 @@ sudo bash ./install.sh
 
 ```bash
 sudo bash ./install.sh
+```
+
+Если VPS чистый и вы хотите повторить базовую настройку с нуля:
+
+```bash
+apt update && apt install -y git curl
+git clone <your-repo-url> xray_server
+cd xray_server
+sudo bash ./bootstrap-server.sh
 ```
 
 ## Что спрашивает configure.sh
