@@ -353,58 +353,84 @@ start_stack() {
   )
 }
 
+uds_status_code() {
+  local socket_path="$1"
+  local url="$2"
+
+  curl -sS -o /dev/null -w '%{http_code}' --unix-socket "${socket_path}" "${url}" 2>/dev/null || true
+}
+
 wait_for_panel_api() {
-  local attempt max_attempts=30 socket_path panel_url
+  local attempt max_attempts=30 socket_path panel_url status_code
   socket_path="${APP_DIR}/marzban_lib/marzban.socket"
   panel_url="http://localhost/api/system"
 
+  log "waiting for Marzban API on ${socket_path}"
+
   for attempt in $(seq 1 "${max_attempts}"); do
-    if [[ -S "${socket_path}" ]] && curl -sSf --unix-socket "${socket_path}" "${panel_url}" >/dev/null 2>&1; then
-      return 0
+    if [[ -S "${socket_path}" ]]; then
+      status_code="$(uds_status_code "${socket_path}" "${panel_url}")"
+      case "${status_code}" in
+        200|401|403)
+          log "Marzban API is ready (GET /api/system -> ${status_code})"
+          return 0
+          ;;
+      esac
     fi
     sleep 2
   done
 
-  fail "panel API did not become ready on ${socket_path}"
+  fail "Marzban readiness check failed: ${socket_path} did not return 200/401/403 on /api/system"
+}
+
+fetch_marzban_token() {
+  local socket_path="$1"
+  local token_url="http://localhost/api/admin/token"
+
+  printf '[xray-install] %s\n' "requesting Marzban admin token" >&2
+
+  curl -sS --fail-with-body --unix-socket "${socket_path}" -X POST "${token_url}" \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    --data-urlencode "username=${MARZBAN_USER}" \
+    --data-urlencode "password=${MARZBAN_PASS}" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
 }
 
 configure_marzban_hosts() {
-  local token token_url hosts_url payload domain_json socket_path
+  local token hosts_url payload domain_json socket_path
 
   socket_path="${APP_DIR}/marzban_lib/marzban.socket"
   domain_json="$(json_escape "${DOMAIN}")"
   wait_for_panel_api
 
-  token_url="http://localhost/api/admin/token"
   hosts_url="http://localhost/api/hosts"
-
-  token="$(
-    curl -sSf --unix-socket "${socket_path}" -X POST "${token_url}" \
-      -H 'Content-Type: application/x-www-form-urlencoded' \
-      --data-urlencode "username=${MARZBAN_USER}" \
-      --data-urlencode "password=${MARZBAN_PASS}" \
-      | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
-  )"
+  token="$(fetch_marzban_token "${socket_path}")" || fail "Marzban token request failed"
 
   payload="$(cat <<EOF
 {"VLESS TCP VISION REALITY":[{"remark":"🚀 Marz ({USERNAME}) [{PROTOCOL} - {TRANSPORT}]","address":${domain_json},"port":443,"sni":${domain_json},"host":null,"path":null,"security":"inbound_default","alpn":"","fingerprint":"chrome","allowinsecure":false,"is_disabled":false,"mux_enable":false,"fragment_setting":null,"noise_setting":null,"random_user_agent":false,"use_sni_as_host":false}]}
 EOF
 )"
 
-  curl -sSf --unix-socket "${socket_path}" -X PUT "${hosts_url}" \
+  log "updating Marzban hosts"
+
+  curl -sS --fail-with-body --unix-socket "${socket_path}" -X PUT "${hosts_url}" \
     -H "Authorization: Bearer ${token}" \
     -H 'Content-Type: application/json' \
-    --data "${payload}" >/dev/null
+    --data "${payload}" >/dev/null || fail "Marzban host update failed"
 }
 
 show_post_install_checks() {
+  local socket_path="${APP_DIR}/marzban_lib/marzban.socket"
   cat <<EOF
 
-Recommended checks:
+Post-install self-check:
   docker ps
   docker logs --tail 50 xray-angie
   docker logs --tail 50 xray-marzban
   curl -kI https://${DOMAIN}
+  curl --unix-socket ${socket_path} http://localhost/api/system
+  curl --unix-socket ${socket_path} -X POST http://localhost/api/admin/token -H 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'username=<admin>' --data-urlencode 'password=<password>'
+  curl --unix-socket ${socket_path} http://localhost/api/hosts -H 'Authorization: Bearer <token>'
 EOF
 }
 
@@ -433,8 +459,10 @@ Marzban:
   Panel allowlist: ${PANEL_ALLOWLIST}
 
 REALITY:
+  UUID: ${XRAY_UUID}
   Public key: ${XRAY_PUBLIC_KEY}
   Short ID: ${XRAY_SHORT_ID}
+  SNI: ${DOMAIN}
 
 Notes:
   1. First certificate issuance depends on ${DOMAIN} resolving to this VPS.
