@@ -1,35 +1,43 @@
-# Agent Notes
+# Заметки По Репозиторию
 
-## Current Production Layout
+## Целевая Схема
 
-- Git working copy on server: `~/xray_server`
-- Live runtime directory on server: `/opt/silentbridge`
-- Live domains:
-  - `edge.silnetbridge.com`
-  - `app.silnetbridge.com`
-- Live containers:
-  - `xray-angie`
-  - `xray-marzban`
+- Репозиторий должен повторять установочную схему из `Akiyamov/xray-vps-setup/install_in_docker.md`
+- Используется один домен `DOMAIN`
+- `Xray` принимает `VLESS + REALITY + Vision` на `443/tcp`
+- `REALITY dest` должен быть `127.0.0.1:4123`
+- `Angie` должен работать как локальный TLS-фасад на `127.0.0.1:4123`
+- `Marzban` и маскировочная страница должны открываться на том же домене
+- Отдельные `edge.` и `app.` поддомены не нужны
 
-## Important Operational Notes
+## Актуальные Переменные
 
-- The live stack currently runs from `/opt/silentbridge`, not from `/opt/xray_panel`.
-- The server clone `~/xray_server` is used as the control repository for updates and maintenance.
-- Do not assume the server is clean before running `install.sh`; inspect `/opt/silentbridge` first.
-- Avoid destructive reset of `/opt/silentbridge` unless the user explicitly asks for reinstall.
-- The live `Marzban` custom templates directory is:
-  - `/opt/silentbridge/marzban_lib/templates`
-- The live subscription page template path is:
-  - `/opt/silentbridge/marzban_lib/templates/subscription/index.html`
+- Обязательная переменная:
+  - `DOMAIN`
+- Основной каталог установки по умолчанию:
+  - `/opt/xray-vps-setup`
+- Старые переменные больше не используются:
+  - `EDGE_DOMAIN`
+  - `PANEL_DOMAIN`
+  - `PANEL_PORT`
+  - `REALITY_SERVER_NAME`
+  - `REALITY_DEST`
+  - `REALITY_ADDRESS`
 
-## Safe Update Pattern
+## Операционные Замечания
 
-1. Update this repository locally and push to GitHub.
-2. On the server, update `~/xray_server`.
-3. For cosmetic subscription changes, copy only the needed template into `/opt/silentbridge/marzban_lib/templates/...`.
-4. Re-run full `install.sh` only when intentionally changing stack config or runtime assets.
+- Рабочая копия репозитория на сервере может лежать отдельно от runtime-каталога
+- Перед повторной установкой безопасно проверить содержимое `APP_DIR`, если на сервере уже был старый деплой
+- Если на сервере остался старый runtime-каталог `/opt/silentbridge`, не удалять его автоматически без явного решения пользователя
+- Кастомные шаблоны `Marzban` после установки находятся в:
+  - `/opt/xray-vps-setup/marzban_lib/templates`
+- Шаблон страницы подписки находится в:
+  - `/opt/xray-vps-setup/marzban_lib/templates/subscription/index.html`
 
-## Backups Present On Server
+## Безопасный Порядок Обновления
 
-- `~/xray_server/.codex-backup/env.before-cleanup`
-- `~/xray_server/.codex-backup/server-local.diff`
+1. Обновить этот репозиторий.
+2. Проверить `.env` и убедиться, что используется только `DOMAIN`.
+3. При необходимости скорректировать DNS так, чтобы только нужный домен указывал на VPS.
+4. Запустить `sudo bash ./install.sh`.
+5. После установки проверить `docker ps`, логи контейнеров и доступность `https://DOMAIN/<dashboard-path>/`.

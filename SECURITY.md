@@ -1,18 +1,18 @@
-# Security Notes
+# Заметки По Безопасности
 
-## Recommended Defaults
+## Рекомендуемая База
 
-- Runtime directory: `/opt/silentbridge`
-- Open ports only:
+- Каталог runtime по умолчанию: `/opt/xray-vps-setup`
+- Открытые входящие порты:
   - `22/tcp`
   - `80/tcp`
   - `443/tcp`
-- Restrict SSH by source IP whenever possible
-- Restrict panel access by IP allowlist or place it behind a trusted access proxy
+- Доступ по SSH лучше ограничить по IP, если это возможно
+- Доступ к панели можно дополнительно ограничить через `PANEL_ALLOWLIST` или через доверенный прокси/туннель
 
-## UFW Baseline
+## Базовая Настройка UFW
 
-Example with SSH allowed only from one trusted public IP:
+Пример, если SSH разрешен только с одного доверенного публичного IP:
 
 ```bash
 sudo ufw default deny incoming
@@ -24,17 +24,17 @@ sudo ufw enable
 sudo ufw status verbose
 ```
 
-If your IP is not stable yet, you can temporarily allow SSH more broadly:
+Если IP пока нестабилен, можно временно разрешить SSH шире:
 
 ```bash
 sudo ufw allow 22/tcp
 ```
 
-Then tighten it later.
+После этого доступ лучше сузить.
 
-## SSH Hardening
+## Усиление SSH
 
-Recommended `/etc/ssh/sshd_config` values:
+Рекомендуемые значения для `/etc/ssh/sshd_config`:
 
 ```conf
 PermitRootLogin no
@@ -44,40 +44,45 @@ ChallengeResponseAuthentication no
 X11Forwarding no
 ```
 
-After edits:
+После правок:
 
 ```bash
 sudo sshd -t
 sudo systemctl restart ssh
 ```
 
-## Panel Exposure
+## Ограничение Доступа К Панели
 
-The repository supports an IP allowlist for the panel vhost through `PANEL_ALLOWLIST`.
+Репозиторий поддерживает необязательный IP allowlist через `PANEL_ALLOWLIST`.
 
-Examples:
+Примеры:
 
 ```dotenv
-PANEL_ALLOWLIST=127.0.0.1/32
 PANEL_ALLOWLIST=203.0.113.10/32
 PANEL_ALLOWLIST=203.0.113.10/32,198.51.100.0/24
 ```
 
-Behavior:
+Поведение:
 
-- when set, only listed IPs can reach the panel vhost
-- all other IPs receive `403`
-- panel root path returns `404`
-- response includes `X-Robots-Tag: noindex, nofollow, noarchive`
+- если `PANEL_ALLOWLIST` задан, только перечисленные IP смогут обращаться к HTTPS-поверхности домена
+- остальные IP будут получать `403`
+- при включенном allowlist корень домена тоже перестает отдавать маскировочную страницу для заблокированных IP
+- ответы панели помечаются заголовком `X-Robots-Tag: noindex, nofollow, noarchive`
 
-## Reverse Access Proxy
+Важно:
 
-If you do not want to expose the panel directly on the same public surface as the edge domain, place `app.<domain>` behind one of these:
+- allowlist применяется к общему домену, потому что панель и маскировочная страница работают на одном `DOMAIN`
+- если включить allowlist слишком рано, можно случайно закрыть доступ и к панели, и к обычной маске с собственного IP
 
-- SSH tunnel
+## Более Безопасный Доступ К Панели
+
+Если не хочется держать панель открытой даже по скрытому пути, лучше использовать один из вариантов ниже:
+
+- SSH-туннель
 - VPN
 - Cloudflare Access
-- Tailscale / WireGuard
-- trusted reverse proxy with authentication
+- Tailscale
+- WireGuard
+- доверенный reverse proxy с аутентификацией
 
-That is safer than keeping the panel publicly reachable from all IPs.
+Это безопаснее, чем оставлять панель доступной для всех IP даже при скрытом URL.

@@ -38,13 +38,8 @@ load_env() {
     source "${EXAMPLE_ENV_FILE}"
   fi
 
-  EDGE_DOMAIN="${EDGE_DOMAIN:-}"
-  PANEL_DOMAIN="${PANEL_DOMAIN:-}"
-  APP_DIR="${APP_DIR:-/opt/silentbridge}"
-  PANEL_PORT="${PANEL_PORT:-8443}"
-  REALITY_SERVER_NAME="${REALITY_SERVER_NAME:-www.cloudflare.com}"
-  REALITY_DEST="${REALITY_DEST:-www.cloudflare.com:443}"
-  REALITY_ADDRESS="${REALITY_ADDRESS:-}"
+  DOMAIN="${DOMAIN:-}"
+  APP_DIR="${APP_DIR:-/opt/xray-vps-setup}"
   XRAY_UUID="${XRAY_UUID:-}"
   XRAY_PRIVATE_KEY="${XRAY_PRIVATE_KEY:-}"
   XRAY_PUBLIC_KEY="${XRAY_PUBLIC_KEY:-}"
@@ -53,26 +48,26 @@ load_env() {
   MARZBAN_PASS="${MARZBAN_PASS:-}"
   MARZBAN_DASHBOARD_PATH="${MARZBAN_DASHBOARD_PATH:-}"
   MARZBAN_SUBSCRIPTION_PATH="${MARZBAN_SUBSCRIPTION_PATH:-}"
-  PANEL_ALLOWLIST="${PANEL_ALLOWLIST:-127.0.0.1/32}"
+  PANEL_ALLOWLIST="${PANEL_ALLOWLIST:-}"
   XRAY_CORE_VERSION="${XRAY_CORE_VERSION:-26.2.6}"
   XRAY_IMAGE_TAG="${XRAY_IMAGE_TAG:-26.3.27}"
   MARZBAN_IMAGE="${MARZBAN_IMAGE:-gozargah/marzban:latest}"
 }
 
 ensure_configured() {
-  if [[ -n "${EDGE_DOMAIN}" && -n "${PANEL_DOMAIN}" ]]; then
+  if [[ -n "${DOMAIN}" ]]; then
     return
   fi
 
   if [[ ! -t 0 ]]; then
-    fail "EDGE_DOMAIN and PANEL_DOMAIN must be set. Run ./configure.sh first or create .env manually"
+    fail "DOMAIN must be set. Run ./configure.sh first or create .env manually"
   fi
 
   log "launching interactive configuration wizard"
   bash "${REPO_DIR}/configure.sh"
   load_env
 
-  [[ -n "${EDGE_DOMAIN}" && -n "${PANEL_DOMAIN}" ]] || fail "set EDGE_DOMAIN and PANEL_DOMAIN in .env before running install.sh"
+  [[ -n "${DOMAIN}" ]] || fail "set DOMAIN in .env before running install.sh"
 }
 
 confirm() {
@@ -166,11 +161,9 @@ ensure_runtime_prereqs() {
   require_command docker
   require_command getent
 
-  check_domain_points_to_server "${EDGE_DOMAIN}"
-  check_domain_points_to_server "${PANEL_DOMAIN}"
+  check_domain_points_to_server "${DOMAIN}"
   check_port_available 80 "${APP_DIR}"
   check_port_available 443 "${APP_DIR}"
-  check_port_available "${PANEL_PORT}" "${APP_DIR}"
 }
 
 generate_uuid() {
@@ -246,14 +239,6 @@ render_template() {
   sed "$@" "${template_file}" >"${output_file}"
 }
 
-panel_port_suffix() {
-  if [[ "${PANEL_PORT}" == "443" ]]; then
-    printf '%s' ""
-  else
-    printf ':%s' "${PANEL_PORT}"
-  fi
-}
-
 sync_runtime_files() {
   install -m 0644 "${REPO_DIR}/docker-compose.yml" "${APP_DIR}/docker-compose.yml"
 }
@@ -293,19 +278,16 @@ download_xray_core() {
 }
 
 write_configs() {
-  local panel_allowlist_rules tmp_allowlist panel_port_suffix_value reality_address_value
+  local panel_allowlist_rules tmp_allowlist
 
   panel_allowlist_rules="$(build_panel_allowlist_rules)"
   tmp_allowlist="$(mktemp)"
   printf '%s\n' "${panel_allowlist_rules}" >"${tmp_allowlist}"
-  panel_port_suffix_value="$(panel_port_suffix)"
-  reality_address_value="${REALITY_ADDRESS:-$(server_ipv4)}"
 
   render_template \
     "${REPO_DIR}/templates/xray.json.tpl" \
     "${APP_DIR}/marzban/xray_config.json" \
-    -e "s|__REALITY_DEST__|${REALITY_DEST}|g" \
-    -e "s|__REALITY_SERVER_NAME__|${REALITY_SERVER_NAME}|g" \
+    -e "s|__DOMAIN__|${DOMAIN}|g" \
     -e "s|__XRAY_PRIVATE_KEY__|${XRAY_PRIVATE_KEY}|g" \
     -e "s|__XRAY_SHORT_ID__|${XRAY_SHORT_ID}|g"
 
@@ -315,16 +297,15 @@ write_configs() {
     -e "s|__MARZBAN_USER__|${MARZBAN_USER}|g" \
     -e "s|__MARZBAN_PASS__|${MARZBAN_PASS}|g" \
     -e "s|__MARZBAN_DASHBOARD_PATH__|${MARZBAN_DASHBOARD_PATH}|g" \
-    -e "s|__PANEL_DOMAIN__|${PANEL_DOMAIN}|g" \
-    -e "s|__PANEL_PORT_SUFFIX__|${panel_port_suffix_value}|g" \
+    -e "s|__DOMAIN__|${DOMAIN}|g" \
     -e "s|__MARZBAN_SUBSCRIPTION_PATH__|${MARZBAN_SUBSCRIPTION_PATH}|g"
 
   render_template \
     "${REPO_DIR}/templates/angie.conf.tpl" \
     "${APP_DIR}/angie.conf" \
-    -e "s|__PANEL_DOMAIN__|${PANEL_DOMAIN}|g" \
-    -e "s|__PANEL_PORT__|${PANEL_PORT}|g" \
-    -e "s|__MARZBAN_DASHBOARD_PATH__|${MARZBAN_DASHBOARD_PATH}|g"
+    -e "s|__DOMAIN__|${DOMAIN}|g" \
+    -e "s|__MARZBAN_DASHBOARD_PATH__|${MARZBAN_DASHBOARD_PATH}|g" \
+    -e "s|__MARZBAN_SUBSCRIPTION_PATH__|${MARZBAN_SUBSCRIPTION_PATH}|g"
 
   python3 - "${APP_DIR}/angie.conf" "${tmp_allowlist}" <<'PY'
 from pathlib import Path
@@ -344,13 +325,8 @@ PY
 
 write_runtime_env() {
   cat >"${APP_DIR}/.env" <<EOF
-EDGE_DOMAIN=${EDGE_DOMAIN}
-PANEL_DOMAIN=${PANEL_DOMAIN}
+DOMAIN=${DOMAIN}
 APP_DIR=${APP_DIR}
-PANEL_PORT=${PANEL_PORT}
-REALITY_SERVER_NAME=${REALITY_SERVER_NAME}
-REALITY_DEST=${REALITY_DEST}
-REALITY_ADDRESS=${REALITY_ADDRESS}
 XRAY_UUID=${XRAY_UUID}
 XRAY_PRIVATE_KEY=${XRAY_PRIVATE_KEY}
 XRAY_PUBLIC_KEY=${XRAY_PUBLIC_KEY}
@@ -393,11 +369,10 @@ wait_for_panel_api() {
 }
 
 configure_marzban_hosts() {
-  local token token_url hosts_url payload address_json sni_json socket_path
+  local token token_url hosts_url payload domain_json socket_path
 
   socket_path="${APP_DIR}/marzban_lib/marzban.socket"
-  address_json="$(json_escape "${REALITY_ADDRESS:-$(server_ipv4)}")"
-  sni_json="$(json_escape "${REALITY_SERVER_NAME}")"
+  domain_json="$(json_escape "${DOMAIN}")"
   wait_for_panel_api
 
   token_url="http://localhost/api/admin/token"
@@ -412,7 +387,7 @@ configure_marzban_hosts() {
   )"
 
   payload="$(cat <<EOF
-{"VLESS TCP VISION REALITY":[{"remark":"🚀 Marz ({USERNAME}) [{PROTOCOL} - {TRANSPORT}]","address":${address_json},"port":443,"sni":${sni_json},"host":null,"path":null,"security":"inbound_default","alpn":"","fingerprint":"chrome","allowinsecure":false,"is_disabled":false,"mux_enable":false,"fragment_setting":null,"noise_setting":null,"random_user_agent":false,"use_sni_as_host":false}]}
+{"VLESS TCP VISION REALITY":[{"remark":"🚀 Marz ({USERNAME}) [{PROTOCOL} - {TRANSPORT}]","address":${domain_json},"port":443,"sni":${domain_json},"host":null,"path":null,"security":"inbound_default","alpn":"","fingerprint":"chrome","allowinsecure":false,"is_disabled":false,"mux_enable":false,"fragment_setting":null,"noise_setting":null,"random_user_agent":false,"use_sni_as_host":false}]}
 EOF
 )"
 
@@ -429,7 +404,7 @@ Recommended checks:
   docker ps
   docker logs --tail 50 xray-angie
   docker logs --tail 50 xray-marzban
-  curl -kI https://${PANEL_DOMAIN}:$(printf '%s' "${PANEL_PORT}")
+  curl -kI https://${DOMAIN}
 EOF
 }
 
@@ -446,11 +421,9 @@ Files:
   Xray config: ${APP_DIR}/marzban/xray_config.json
 
 Domains:
-  REALITY address: ${REALITY_ADDRESS:-$(server_ipv4)}
-  REALITY SNI: ${REALITY_SERVER_NAME}
-  REALITY fallback dest: ${REALITY_DEST}
-  Marzban panel domain: ${PANEL_DOMAIN}
-  Marzban panel port: ${PANEL_PORT}
+  Domain: ${DOMAIN}
+  REALITY SNI: ${DOMAIN}
+  REALITY fallback dest: 127.0.0.1:4123
 
 Marzban:
   Admin user: ${MARZBAN_USER}
@@ -464,10 +437,10 @@ REALITY:
   Short ID: ${XRAY_SHORT_ID}
 
 Notes:
-  1. First certificate issuance depends on both domains resolving to this VPS.
-  2. Open https://${PANEL_DOMAIN}$(panel_port_suffix)/${MARZBAN_DASHBOARD_PATH}/ to reach the panel.
-  3. The panel root path returns 404 and panel responses are marked noindex.
-  4. Client links are generated by Marzban and should use the server IP plus the REALITY SNI above.
+  1. First certificate issuance depends on ${DOMAIN} resolving to this VPS.
+  2. Open https://${DOMAIN}/${MARZBAN_DASHBOARD_PATH}/ to reach the panel.
+  3. The panel root path serves the mask page, and panel responses are marked noindex.
+  4. Client links generated by Marzban use ${DOMAIN} for both address and SNI.
   5. Re-run ./install.sh after changing .env to regenerate configs and restart the stack.
 EOF
 }

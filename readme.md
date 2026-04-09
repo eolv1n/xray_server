@@ -1,38 +1,81 @@
 # xray_server
 
-Репозиторий переводит стек на один основной сценарий:
+Репозиторий готовит сервер по той же схеме, что и `Akiyamov/xray-vps-setup/install_in_docker.md`, но в виде локального управляемого проекта с автоматизацией установки.
+
+## Что В Итоге Получается
 
 - `VLESS + REALITY + Vision` на `443`
 - `Marzban` как панель управления
-- `Angie` как локальный HTTPS-фасад для сертификатов, маскировочной страницы и панели
-- без `XHTTP`
-- без Cloudflare-зависимости
-- без stream-развилки по source IP
+- `Angie` как локальный TLS-фасад на `127.0.0.1:4123`
+- один домен для клиента, панели и маскировочной страницы
+- скрытый путь для панели `Marzban`
+- скрытый путь для страницы подписок
+- установка и перегенерация через локальные скрипты
 
-Архитектура опирается на подход `Akiyamov/xray-vps-setup`, но адаптирована под отдельные домены для edge и панели.
+## Целевая Схема
 
-## Что уже автоматизировано
+Рабочая схема такая:
+
+- клиент подключается к `DOMAIN:443`
+- `Xray` принимает `REALITY`
+- обычный TLS-трафик уходит на `127.0.0.1:4123`
+- на `127.0.0.1:4123` работает `Angie`
+- `Angie` отдает маскировочную страницу и проксирует панель `Marzban`
+
+Это значит:
+
+- `REALITY dest` должен быть `127.0.0.1:4123`
+- отдельные `edge.` и `app.` поддомены не нужны
+- панель не должна жить на отдельном порту
+
+## Что Уже Автоматизировано
 
 - `configure.sh` подготавливает `.env`
 - `install.sh` сам вызывает `configure.sh`, если конфиг еще не создан
-- установка `docker.io` и `docker compose v2`
-- генерация `UUID`, `x25519` ключей, `shortId`
-- генерация логина и пароля администратора `Marzban`
-- генерация скрытого dashboard path и subscription path
-- загрузка `Xray-core`
-- рендер `Angie`, `Marzban` и `Xray` конфигов
-- запуск стека через `docker compose`
-- базовая защита панели через `PANEL_ALLOWLIST`
+- устанавливаются `docker.io` и `docker compose v2`
+- генерируются `UUID`, `x25519` ключи и `shortId`
+- генерируются логин и пароль администратора `Marzban`
+- генерируются скрытые пути для панели и подписок
+- загружается `Xray-core`
+- рендерятся конфиги `Angie`, `Marzban` и `Xray`
+- стек запускается через `docker compose`
+- хост `Marzban` настраивается через API после старта
+- при необходимости доступ к панели можно ограничить через `PANEL_ALLOWLIST`
 
-## Что нужно заранее
+## Что Нужно Заранее
 
-- Ubuntu 22.04+ или совместимый Debian-based VPS
+- VPS на Ubuntu 22.04+ или другом совместимом Debian-based дистрибутиве
 - открытые `80/tcp` и `443/tcp`
-- два домена, которые уже указывают на VPS:
-  - `EDGE_DOMAIN`, например `edge.example.net`
-  - `PANEL_DOMAIN`, например `panel.example.net`
+- один домен, уже указывающий на VPS
 
-## Быстрый старт
+Пример:
+
+```dotenv
+DOMAIN=vpn.example.net
+```
+
+## DNS
+
+Для этой схемы нужна только одна `A`-запись:
+
+```text
+vpn.example.net -> <IP_вашего_VPS>
+```
+
+Если раньше были записи вроде:
+
+- `example.net -> <IP>`
+- `edge.example.net -> <IP>`
+- `app.example.net -> <IP>`
+
+то для текущего репозитория лишние поддомены можно удалить, если они больше нигде не используются.
+
+Проверьте также:
+
+- чтобы не осталось `AAAA`-записей на чужой IPv6
+- чтобы домен действительно резолвился на IP текущего VPS
+
+## Быстрый Старт
 
 ```bash
 git clone <your-repo-url> xray_server
@@ -41,62 +84,60 @@ bash ./configure.sh
 sudo bash ./install.sh
 ```
 
-Или одним шагом:
+Или сразу:
 
 ```bash
 sudo bash ./install.sh
 ```
 
-## Что спрашивает configure.sh
+## Что Спрашивает configure.sh
 
-`configure.sh` спрашивает:
+Скрипт спрашивает:
 
-- домен для REALITY, например `edge.example.net`
-- домен панели, например `panel.example.net`
+- домен `DOMAIN`
 - каталог установки
 - образ `Marzban`
 - необязательные overrides для `UUID`, ключей, `shortId`, логина и пароля панели
 
-Если секретные поля пустые, `install.sh` сгенерирует их автоматически.
+Если секретные поля оставить пустыми, `install.sh` сгенерирует их сам.
 
-## Как выглядит поток установки
+## Как Проходит Установка
 
 1. Клонируете репозиторий на сервер.
 2. Запускаете `bash ./configure.sh`.
-3. Проверяете DNS для `EDGE_DOMAIN` и `PANEL_DOMAIN`.
+3. Проверяете, что `DOMAIN` уже смотрит на VPS.
 4. Запускаете `sudo bash ./install.sh`.
 5. Получаете:
-   - URL панели `Marzban`
-   - логин и пароль администратора
-   - `UUID`, `PBK`, `shortId`
-   - готовую `vless://` ссылку для клиента
+- URL панели `Marzban`
+- логин и пароль администратора
+- `UUID`, `PBK`, `shortId`
+- готовую основу для клиентского подключения через `Marzban`
 
-## Файлы
+## Структура Репозитория
 
 - `configure.sh` - интерактивный генератор `.env`
 - `install.sh` - основной установщик
 - `docker-compose.yml` - контейнеры `Angie` и `Marzban`
-- `templates/angie.conf.tpl` - HTTPS-фасад и ACME
-- `templates/xray.json.tpl` - `REALITY` конфиг для `Marzban`
-- `templates/marzban.env.tpl` - переменные панели
+- `templates/angie.conf.tpl` - шаблон локального TLS-фасада
+- `templates/xray.json.tpl` - шаблон `REALITY` конфига для `Marzban`
+- `templates/marzban.env.tpl` - переменные окружения панели
 - `templates/mask.html.tpl` - маскировочная страница
-- `templates/subscription-index.html.tpl` - локальный subscription page template
-- `install-subscription-assets.sh` - установщик subscription templates и client templates
+- `templates/subscription-index.html.tpl` - локальный шаблон страницы подписки
+- `install-subscription-assets.sh` - установка и обновление шаблонов подписки
 - `.env.example` - пример переменных окружения
 
 ## Переменные .env
 
-Обязательные:
+Минимально достаточно:
 
 ```dotenv
-EDGE_DOMAIN=edge.example.net
-PANEL_DOMAIN=panel.example.net
+DOMAIN=vpn.example.net
 ```
 
-Опциональные:
+Дополнительно можно задать:
 
 ```dotenv
-APP_DIR=/opt/silentbridge
+APP_DIR=/opt/xray-vps-setup
 XRAY_UUID=
 XRAY_PRIVATE_KEY=
 XRAY_PUBLIC_KEY=
@@ -105,64 +146,62 @@ MARZBAN_USER=
 MARZBAN_PASS=
 MARZBAN_DASHBOARD_PATH=
 MARZBAN_SUBSCRIPTION_PATH=
-PANEL_ALLOWLIST=127.0.0.1/32
+PANEL_ALLOWLIST=
 XRAY_CORE_VERSION=26.2.6
 XRAY_IMAGE_TAG=26.3.27
 MARZBAN_IMAGE=gozargah/marzban:latest
 ```
 
-## Где лежат результаты
+## Где Лежат Результаты После Установки
 
-После установки рабочие файлы находятся здесь:
+- `/opt/xray-vps-setup/docker-compose.yml`
+- `/opt/xray-vps-setup/.env`
+- `/opt/xray-vps-setup/angie.conf`
+- `/opt/xray-vps-setup/marzban/.env`
+- `/opt/xray-vps-setup/marzban/xray_config.json`
+- `/opt/xray-vps-setup/xray-core`
+- `/opt/xray-vps-setup/mask/index.html`
 
-- `/opt/silentbridge/docker-compose.yml`
-- `/opt/silentbridge/.env`
-- `/opt/silentbridge/angie.conf`
-- `/opt/silentbridge/marzban/.env`
-- `/opt/silentbridge/marzban/xray_config.json`
-- `/opt/silentbridge/xray-core`
-- `/opt/silentbridge/mask/index.html`
+## Как Зайти В Панель
 
-## Доступ к панели
-
-После установки используйте URL:
+После установки используйте адрес:
 
 ```text
-https://PANEL_DOMAIN/MARZBAN_DASHBOARD_PATH/
+https://DOMAIN/MARZBAN_DASHBOARD_PATH/
 ```
 
-Логин и пароль печатаются в конце `install.sh`.
+Логин и пароль администратора печатаются в конце `install.sh`.
 
-По умолчанию панель ограничена через `PANEL_ALLOWLIST`, а root-path панели не индексируется и не отдается наружу.
+На корне домена открывается маскировочная страница, а сама панель доступна только по скрытому пути.
 
-## Повторный запуск
+## Повторный Запуск
 
-Если вы изменили `.env`, повторите:
+Если вы меняли `.env`, достаточно снова выполнить:
 
 ```bash
 sudo bash ./install.sh
 ```
 
-Установщик пересоберет конфиги и перезапустит стек.
+Скрипт пересоберет конфиги и перезапустит стек.
 
-## Subscription Templates
+## Шаблоны Страницы Подписки
 
-Если хотите установить или обновить subscription page и шаблоны для клиентов без полного reinstall, используйте:
+Если нужно обновить только страницу подписки и клиентские шаблоны без полной переустановки:
 
 ```bash
 bash ./install-subscription-assets.sh
 ```
 
-Скрипт аккуратно переносит идею `marz-sub.sh` в ваш репозиторий:
+Скрипт:
 
-- ставит локальный polished template по умолчанию
-- умеет подтянуть альтернативные templates по HTTPS
-- обновляет `Marzban` env только по нужным ключам
-- не требует запуска удаленного shell-скрипта напрямую
+- ставит локальный шаблон страницы подписки по умолчанию
+- умеет скачивать альтернативные шаблоны по HTTPS
+- обновляет только нужные ключи в `Marzban` env
+- не требует запускать внешний shell-скрипт напрямую
 
-## Важные замечания
+## Важные Замечания
 
-- для новой схемы Cloudflare не требуется
-- `PANEL_DOMAIN` и `EDGE_DOMAIN` можно держать на одном IP
-- сертификаты выпускаются контейнером `Angie` через ACME после того, как оба домена резолвятся на VPS
-- security baseline и рекомендации по `ufw` и SSH ограничению описаны в `SECURITY.md`
+- отдельные `edge.` и `app.` поддомены для этой схемы не нужны
+- сертификаты выпускает `Angie` через ACME после того, как `DOMAIN` начинает указывать на VPS
+- `Xray` на `443` передает обычный TLS-трафик на локальный `Angie` по `127.0.0.1:4123`
+- рекомендации по безопасности, `ufw` и SSH вынесены в `SECURITY.md`

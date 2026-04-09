@@ -16,10 +16,10 @@
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "xver": 0,
-          "dest": "__REALITY_DEST__",
+          "xver": 1,
+          "dest": "127.0.0.1:4123",
           "serverNames": [
-            "__REALITY_SERVER_NAME__"
+            "__DOMAIN__"
           ],
           "privateKey": "__XRAY_PRIVATE_KEY__",
           "shortIds": [

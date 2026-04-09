@@ -7,7 +7,7 @@ services:
     volumes:
       - angie-data:/var/lib/angie
       - ./angie.conf:/etc/angie/angie.conf:ro
-      - ./mask:${APP_DIR:-/opt/silentbridge}/mask:ro
+      - ./mask/index.html:/tmp/index.html:ro
       - ./marzban_lib:/var/lib/marzban:ro
 
   marzban:

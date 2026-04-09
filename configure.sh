@@ -14,13 +14,8 @@ elif [[ -f "${EXAMPLE_ENV_FILE}" ]]; then
   source "${EXAMPLE_ENV_FILE}"
 fi
 
-EDGE_DOMAIN="${EDGE_DOMAIN:-}"
-PANEL_DOMAIN="${PANEL_DOMAIN:-}"
-APP_DIR="${APP_DIR:-/opt/silentbridge}"
-PANEL_PORT="${PANEL_PORT:-8443}"
-REALITY_SERVER_NAME="${REALITY_SERVER_NAME:-www.cloudflare.com}"
-REALITY_DEST="${REALITY_DEST:-www.cloudflare.com:443}"
-REALITY_ADDRESS="${REALITY_ADDRESS:-}"
+DOMAIN="${DOMAIN:-}"
+APP_DIR="${APP_DIR:-/opt/xray-vps-setup}"
 XRAY_UUID="${XRAY_UUID:-}"
 XRAY_PRIVATE_KEY="${XRAY_PRIVATE_KEY:-}"
 XRAY_PUBLIC_KEY="${XRAY_PUBLIC_KEY:-}"
@@ -29,7 +24,7 @@ MARZBAN_USER="${MARZBAN_USER:-}"
 MARZBAN_PASS="${MARZBAN_PASS:-}"
 MARZBAN_DASHBOARD_PATH="${MARZBAN_DASHBOARD_PATH:-}"
 MARZBAN_SUBSCRIPTION_PATH="${MARZBAN_SUBSCRIPTION_PATH:-}"
-PANEL_ALLOWLIST="${PANEL_ALLOWLIST:-127.0.0.1/32}"
+PANEL_ALLOWLIST="${PANEL_ALLOWLIST:-}"
 XRAY_CORE_VERSION="${XRAY_CORE_VERSION:-26.2.6}"
 XRAY_IMAGE_TAG="${XRAY_IMAGE_TAG:-26.3.27}"
 MARZBAN_IMAGE="${MARZBAN_IMAGE:-gozargah/marzban:latest}"
@@ -101,13 +96,8 @@ prompt_domain_value() {
 
 write_env() {
   cat >"${ENV_FILE}" <<EOF
-EDGE_DOMAIN=${EDGE_DOMAIN}
-PANEL_DOMAIN=${PANEL_DOMAIN}
+DOMAIN=${DOMAIN}
 APP_DIR=${APP_DIR}
-PANEL_PORT=${PANEL_PORT}
-REALITY_SERVER_NAME=${REALITY_SERVER_NAME}
-REALITY_DEST=${REALITY_DEST}
-REALITY_ADDRESS=${REALITY_ADDRESS}
 
 # Optional overrides. Leave empty to autogenerate.
 XRAY_UUID=${XRAY_UUID}
@@ -136,16 +126,11 @@ Press Enter to keep the suggested value shown in brackets.
 Leave secret fields empty to let install.sh generate them automatically.
 EOF
 
-  EDGE_DOMAIN="$(prompt_domain_value "1/7 Legacy edge domain label" "${EDGE_DOMAIN}")"
-  PANEL_DOMAIN="$(prompt_domain_value "2/7 Domain for Marzban panel" "${PANEL_DOMAIN}")"
-  APP_DIR="$(prompt_text "3/7 Install directory" "${APP_DIR}" 1)"
-  PANEL_PORT="$(prompt_text "4/7 Public HTTPS port for panel" "${PANEL_PORT}" 1)"
-  REALITY_SERVER_NAME="$(prompt_domain_value "5/7 REALITY SNI / decoy domain" "${REALITY_SERVER_NAME}")"
-  REALITY_DEST="$(prompt_text "6/7 REALITY destination host:port" "${REALITY_DEST}" 1)"
-  MARZBAN_IMAGE="$(prompt_text "7/7 Marzban image" "${MARZBAN_IMAGE}" 1)"
+  DOMAIN="$(prompt_domain_value "1/3 Domain for Xray and Marzban panel" "${DOMAIN}")"
+  APP_DIR="$(prompt_text "2/3 Install directory" "${APP_DIR}" 1)"
+  MARZBAN_IMAGE="$(prompt_text "3/3 Marzban image" "${MARZBAN_IMAGE}" 1)"
 
   XRAY_UUID="$(prompt_text "Optional UUID override" "${XRAY_UUID}" 0)"
-  REALITY_ADDRESS="$(prompt_text "Optional REALITY address override (defaults to server IPv4)" "${REALITY_ADDRESS}" 0)"
   XRAY_PRIVATE_KEY="$(prompt_text "Optional REALITY private key override" "${XRAY_PRIVATE_KEY}" 0)"
   XRAY_PUBLIC_KEY="$(prompt_text "Optional REALITY public key override" "${XRAY_PUBLIC_KEY}" 0)"
   XRAY_SHORT_ID="$(prompt_text "Optional REALITY shortId override" "${XRAY_SHORT_ID}" 0)"
@@ -162,9 +147,8 @@ EOF
 .env written to ${ENV_FILE}
 
 Before installation, make sure:
-  1. ${EDGE_DOMAIN} points to your VPS.
-  2. ${PANEL_DOMAIN} points to your VPS.
-  3. Ports 80/tcp, 443/tcp and ${PANEL_PORT}/tcp are open on the server.
+  1. ${DOMAIN} points to your VPS.
+  2. Ports 80/tcp and 443/tcp are open on the server.
 
 Next command:
   sudo bash ./install.sh

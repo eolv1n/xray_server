@@ -8,29 +8,55 @@ events {
 }
 
 http {
-    access_log /var/log/angie/access.log;
+    log_format main '[$time_local] $proxy_protocol_addr "$http_referer" "$http_user_agent"';
+    access_log /var/log/angie/access.log main;
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ""      close;
+    }
+
+    map $proxy_protocol_addr $proxy_forwarded_elem {
+        ~^[0-9.]+$        "for=$proxy_protocol_addr";
+        ~^[0-9A-Fa-f:.]+$ "for=\"[$proxy_protocol_addr]\"";
+        default           "for=unknown";
+    }
+
+    map $http_forwarded $proxy_add_forwarded {
+        "~^(,[ \t]*)*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?)*([ \t]*,([ \t]*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?)*)?)*$" "$http_forwarded, $proxy_forwarded_elem";
+        default "$proxy_forwarded_elem";
+    }
 
     resolver 1.1.1.1;
 
-    acme_client panel https://acme-v02.api.letsencrypt.org/directory;
+    acme_client vless https://acme-v02.api.letsencrypt.org/directory;
 
     server {
         listen 80;
         listen [::]:80;
-        server_name __PANEL_DOMAIN__;
-        return 301 https://$host:__PANEL_PORT__$request_uri;
+        return 301 https://$host$request_uri;
     }
 
     server {
-        listen __PANEL_PORT__ ssl;
-        listen [::]:__PANEL_PORT__ ssl;
+        listen 127.0.0.1:4123 ssl default_server;
+        ssl_reject_handshake on;
+
+        ssl_protocols              TLSv1.2 TLSv1.3;
+        ssl_session_timeout        1h;
+        ssl_session_cache          shared:SSL:10m;
+    }
+
+    server {
+        listen 127.0.0.1:4123 ssl proxy_protocol;
         http2 on;
+        set_real_ip_from 127.0.0.1;
+        real_ip_header proxy_protocol;
 
-        server_name __PANEL_DOMAIN__;
+        server_name __DOMAIN__;
 
-        acme panel;
-        ssl_certificate     $acme_cert_panel;
-        ssl_certificate_key $acme_cert_key_panel;
+        acme vless;
+        ssl_certificate     $acme_cert_vless;
+        ssl_certificate_key $acme_cert_key_vless;
 
         ssl_protocols              TLSv1.2 TLSv1.3;
         ssl_ciphers                TLS13_AES_128_GCM_SHA256:TLS13_AES_256_GCM_SHA384:TLS13_CHACHA20_POLY1305_SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305;
@@ -44,22 +70,18 @@ http {
 
 __PANEL_ALLOWLIST_RULES__
 
-        location = / {
-            return 404;
-        }
-
-        location ~* ^/(api|docs|redoc|openapi.json|statics|__MARZBAN_DASHBOARD_PATH__/) {
+        location ~* /(__MARZBAN_DASHBOARD_PATH__|statics|__MARZBAN_SUBSCRIPTION_PATH__|api|docs|redoc|openapi.json) {
             proxy_pass                         http://unix:/var/lib/marzban/marzban.socket:;
             proxy_http_version                 1.1;
             proxy_set_header Host              $host;
-            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Real-IP         $proxy_protocol_addr;
             proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-            proxy_set_header Forwarded         "for=$remote_addr";
-            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header Forwarded         $proxy_add_forwarded;
         }
 
         location / {
-            return 404;
+            root /tmp;
+            index index.html;
         }
     }
 }
