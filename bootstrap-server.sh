@@ -4,6 +4,7 @@ set -euo pipefail
 
 DEFAULT_USER="eol"
 DEFAULT_OPEN_PORTS="22 80 443"
+DEFAULT_FAIL2BAN_IGNORE_IPS="127.0.0.1/8 ::1"
 
 log() {
   printf '[bootstrap] %s\n' "$*"
@@ -72,6 +73,22 @@ prompt_secret() {
   done
 }
 
+append_authorized_key() {
+  local user_name="$1"
+  local public_key="$2"
+  local ssh_dir="/home/${user_name}/.ssh"
+  local auth_file="${ssh_dir}/authorized_keys"
+
+  install -d -m 0700 -o "${user_name}" -g "${user_name}" "${ssh_dir}"
+  touch "${auth_file}"
+  chown "${user_name}:${user_name}" "${auth_file}"
+  chmod 0600 "${auth_file}"
+
+  if ! grep -qxF "${public_key}" "${auth_file}"; then
+    printf '%s\n' "${public_key}" >>"${auth_file}"
+  fi
+}
+
 write_sshd_hardening() {
   cat >/etc/ssh/sshd_config.d/60-bootstrap-hardening.conf <<EOF
 PermitRootLogin no
@@ -86,6 +103,23 @@ AllowUsers ${ADMIN_USER}
 EOF
 }
 
+write_fail2ban_jail() {
+  cat >/etc/fail2ban/jail.local <<EOF
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+backend = systemd
+banaction = ufw
+ignoreip = ${FAIL2BAN_IGNORE_IPS}
+
+[sshd]
+enabled = true
+port = 22
+logpath = %(sshd_log)s
+EOF
+}
+
 create_admin_user() {
   if id -u "${ADMIN_USER}" >/dev/null 2>&1; then
     log "user ${ADMIN_USER} already exists"
@@ -95,6 +129,10 @@ create_admin_user() {
 
   printf '%s:%s\n' "${ADMIN_USER}" "${ADMIN_PASS}" | chpasswd
   usermod -aG sudo "${ADMIN_USER}"
+
+  if [[ -n "${ADMIN_PUBKEY}" ]]; then
+    append_authorized_key "${ADMIN_USER}" "${ADMIN_PUBKEY}"
+  fi
 }
 
 install_packages() {
@@ -111,7 +149,16 @@ configure_docker() {
 }
 
 configure_fail2ban() {
+  mkdir -p /etc/fail2ban
+  write_fail2ban_jail
   systemctl enable --now fail2ban
+}
+
+configure_kernel() {
+  if ! grep -q '^vm.overcommit_memory = 1$' /etc/sysctl.conf; then
+    printf '\nvm.overcommit_memory = 1\n' >>/etc/sysctl.conf
+  fi
+  sysctl -w vm.overcommit_memory=1 >/dev/null
 }
 
 configure_ssh() {
@@ -150,9 +197,9 @@ Current SSH policy:
   - key login enabled
 
 Recommended next steps:
-  1. Add your SSH public key to /home/${ADMIN_USER}/.ssh/authorized_keys
-  2. Verify SSH login as ${ADMIN_USER}
-  3. Optionally disable PasswordAuthentication after key login works
+  1. Verify SSH login as ${ADMIN_USER}
+  2. Add any extra SSH public keys to /home/${ADMIN_USER}/.ssh/authorized_keys
+  3. Optionally disable PasswordAuthentication after key login works everywhere
   4. Reboot if apt upgraded the kernel
 EOF
 }
@@ -172,12 +219,15 @@ EOF
 
   ADMIN_USER="$(prompt_text "Admin username" "${DEFAULT_USER}" 1)"
   ADMIN_PASS="$(prompt_secret "Password for ${ADMIN_USER}")"
+  ADMIN_PUBKEY="$(prompt_text "Optional SSH public key for ${ADMIN_USER}" "" 0)"
   OPEN_PORTS="$(prompt_text "TCP ports to allow through UFW" "${DEFAULT_OPEN_PORTS}" 1)"
+  FAIL2BAN_IGNORE_IPS="$(prompt_text "Fail2ban ignore IPs/networks" "${DEFAULT_FAIL2BAN_IGNORE_IPS}" 1)"
 
   create_admin_user
   install_packages
   configure_docker
   configure_fail2ban
+  configure_kernel
   configure_ssh
   configure_firewall
   print_summary

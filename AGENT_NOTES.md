@@ -1,21 +1,28 @@
 # Заметки
 
-- репозиторий должен повторять схему `Akiyamov/xray-vps-setup/install_in_docker.md`
-- используется один домен `DOMAIN`
-- `Xray` принимает `VLESS + REALITY + Vision` на `443/tcp`
-- `REALITY dest` должен быть `127.0.0.1:4123`
-- `Angie` должен работать как локальный TLS-фасад на `127.0.0.1:4123`
-- `Marzban` и маскировочная страница должны работать на том же домене
+- основной путь репозитория теперь `Remnawave`, а не `Marzban`
+- для пользователя желательно один верхнеуровневый вход через `install-remnawave.sh`
+- базовая схема single-server:
+  - `panel.example.com` - панель
+  - `sub.example.com` - subscription page
+  - `example.com` - selfsteal домен ноды
+- отдельная нода ставится на второй VPS и подключается к уже существующей панели
 
 Актуальные переменные:
 
-- `DOMAIN`
-- `APP_DIR` по умолчанию `/opt/xray-vps-setup`
+- `REMNAWAVE_PANEL_DOMAIN`
+- `REMNAWAVE_SUB_DOMAIN`
+- `REMNAWAVE_NODE_DOMAIN`
+- `LETSENCRYPT_EMAIL`
+- для second-node сценария:
+  - `REMNAWAVE_PANEL_IP`
+  - `REMNAWAVE_NODE_SECRET_KEY_FILE` или `REMNAWAVE_NODE_SECRET_KEY`
 
 Операционно:
 
-- рабочая копия репозитория на сервере может лежать отдельно от runtime-каталога
-- перед повторной установкой лучше проверить содержимое `APP_DIR`, если на сервере уже был старый деплой
-- если на сервере остался `/opt/silentbridge`, не удалять его автоматически без явного решения пользователя
-- кастомные шаблоны `Marzban` после установки лежат в `/opt/xray-vps-setup/marzban_lib/templates`
-- шаблон страницы подписки лежит в `/opt/xray-vps-setup/marzban_lib/templates/subscription/index.html`
+- рабочая копия upstream `remnawave-reverse-proxy` может жить отдельно, по умолчанию `/usr/local/src/remnawave-reverse-proxy`
+- runtime single-server схемы: `/opt/remnawave`
+- runtime отдельной ноды: `/opt/remnanode`
+- `Ubuntu 24.04` предпочтительнее, но для `Ubuntu 25.04` сейчас нужен локальный патч проверки ОС у upstream installer
+- upstream single-server путь следует считать компромиссным, а не идеальным production-эталоном
+- legacy-файлы `Marzban` пока оставлены, но не считаются основной схемой

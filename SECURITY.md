@@ -1,79 +1,101 @@
 # Безопасность
 
-- каталог runtime по умолчанию: `/opt/xray-vps-setup`
+- типовой runtime для single-server схемы: `/opt/remnawave`
+- типовой runtime отдельной ноды: `/opt/remnanode`
 - открытые входящие порты: `22/tcp`, `80/tcp`, `443/tcp`
-- SSH лучше ограничить по IP, если это возможно
-- доступ к панели можно дополнительно ограничить через `PANEL_ALLOWLIST`
+- `2222/tcp` должен быть доступен только от IP сервера панели
+- `root`-вход по SSH лучше держать выключенным
+
+## SSH
+
+Базовая рекомендуемая политика:
+
+```conf
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+X11Forwarding no
+MaxAuthTries 3
+```
+
+Практический порядок:
+
+1. Создайте пользователя, например `eol`.
+2. Добавьте хотя бы один рабочий публичный ключ.
+3. Проверьте вход ключом со всех нужных машин.
+4. Только после этого отключайте `PasswordAuthentication`.
 
 ## UFW
 
-Пример, если SSH разрешен только с одного доверенного IP:
+Базовый вариант:
 
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
+sudo ufw allow 22/tcp
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
-sudo ufw allow from <YOUR_PUBLIC_IP>/32 to any port 22 proto tcp
 sudo ufw enable
+```
+
+Для отдельной ноды дополнительно сузьте `2222/tcp` до IP панели:
+
+```bash
+sudo ufw allow from <PANEL_IP> to any port 2222 proto tcp
 sudo ufw status verbose
 ```
 
-Если IP пока нестабилен:
+Если есть стабильный домашний/офисный IP, SSH лучше тоже сузить до него.
 
-```bash
-sudo ufw allow 22/tcp
+## Fail2Ban
+
+Хороший минимум для SSH:
+
+```ini
+[DEFAULT]
+bantime = 1h
+findtime = 10m
+maxretry = 5
+backend = systemd
+banaction = ufw
+ignoreip = 127.0.0.1/8 ::1 <YOUR_TRUSTED_IP>
+
+[sshd]
+enabled = true
+port = 22
+logpath = %(sshd_log)s
 ```
-
-Потом доступ лучше сузить.
-
-## SSH
-
-Рекомендуемые значения для `/etc/ssh/sshd_config`:
-
-```conf
-PermitRootLogin no
-PasswordAuthentication no
-PubkeyAuthentication yes
-ChallengeResponseAuthentication no
-X11Forwarding no
-```
-
-После правок:
-
-```bash
-sudo sshd -t
-sudo systemctl restart ssh
-```
-
-## PANEL_ALLOWLIST
-
-Примеры:
-
-```dotenv
-PANEL_ALLOWLIST=203.0.113.10/32
-PANEL_ALLOWLIST=203.0.113.10/32,198.51.100.0/24
-```
-
-Если `PANEL_ALLOWLIST` задан:
-
-- только перечисленные IP смогут обращаться к HTTPS-поверхности домена
-- остальные IP будут получать `403`
-- корень домена тоже перестанет отдавать маскировочную страницу для заблокированных IP
-- ответы панели будут содержать `X-Robots-Tag: noindex, nofollow, noarchive`
 
 Важно:
 
-- allowlist применяется ко всему домену, потому что панель и маскировочная страница работают на одном `DOMAIN`
-- если включить allowlist слишком рано, можно закрыть доступ и к панели, и к обычной маске со своего IP
+- не забывайте добавить свой текущий IP в `ignoreip`, если активно тестируете парольный SSH
+- перед ужесточением `fail2ban` полезно иметь доступ через консоль провайдера
 
-## Более безопасный доступ к панели
+## Panel Access
 
-Если не хочется держать панель открытой даже по скрытому пути, лучше использовать:
+В single-server схеме у `Remnawave` панель живет на отдельном домене, например:
+
+```text
+https://panel.example.com/
+```
+
+Если не хочется держать панель открытой в интернет:
 
 - SSH-туннель
 - VPN
 - Cloudflare Access
 - Tailscale
 - WireGuard
-- доверенный reverse proxy с аутентификацией
+- reverse proxy с отдельной аутентификацией
+
+## Sysctl
+
+Для `valkey` лучше заранее включить:
+
+```bash
+sudo sysctl -w vm.overcommit_memory=1
+```
+
+И закрепить это в `/etc/sysctl.conf`.

@@ -1,207 +1,156 @@
 # xray_server
 
-Репозиторий готовит сервер по схеме `Akiyamov/xray-vps-setup/install_in_docker.md`, но с локальными скриптами для установки и обновления.
+Репозиторий теперь ориентирован на `Remnawave` и хранит локальные обертки вокруг `eGamesAPI/remnawave-reverse-proxy`, плюс базовую подготовку VPS.
 
 ## Что здесь получается
 
-- `VLESS + REALITY + Vision` на `443`
-- `Marzban` как панель
-- `Angie` как локальный TLS-фасад на `127.0.0.1:4123`
-- один домен для клиента, панели и маскировочной страницы
-- скрытый путь для панели
-- скрытый путь для подписок
+- базовая безопасная подготовка Ubuntu-сервера
+- `Remnawave panel + node + subscription-page` на одном VPS
+- отдельная `Remnawave`-нода, которую можно подключить ко внешней панели
+- один понятный `.env` c доменами и email
 
-## Схема
+## Поддерживаемая схема
 
-- клиент подключается к `DOMAIN:443`
-- `Xray` принимает `REALITY`
-- обычный TLS-трафик передается на `127.0.0.1:4123`
-- на `127.0.0.1:4123` работает `Angie`
-- `Angie` отдает маскировочную страницу и проксирует `Marzban`
+Основной сценарий:
 
-То есть:
+- `panel.example.com` - панель
+- `sub.example.com` - страница подписки
+- `example.com` - selfsteal-домен ноды
 
-- `REALITY dest` должен быть `127.0.0.1:4123`
-- панель не должна жить на отдельном порту
+Для отдельной ноды:
 
-## Что автоматизировано
+- отдельный VPS
+- отдельный домен ноды
+- IP сервера панели
+- `Secret Key` ноды из карточки редактирования ноды в панели
 
-- `configure.sh` создает `.env`
-- `install.sh` сам вызывает `configure.sh`, если конфига еще нет
-- ставятся `docker.io` и `docker compose v2`
-- генерируются `UUID`, `x25519` ключи и `shortId`
-- генерируются логин и пароль администратора `Marzban`
-- генерируются скрытые пути панели и подписок
-- загружается `Xray-core`
-- рендерятся конфиги `Angie`, `Marzban` и `Xray`
-- стек запускается через `docker compose`
-- хост `Marzban` настраивается через API после старта
+## Файлы
 
-## Что нужно заранее
+- `bootstrap-server.sh` - базовая подготовка сервера
+- `install-remnawave.sh` - единая точка входа с выбором сценария
+- `install-remnawave-panel-node.sh` - установка панели и ноды на один сервер
+- `install-remnawave-node.sh` - установка отдельной ноды к существующей панели
+- `.env.example` - пример переменных окружения
+- `SECURITY.md` - базовые рекомендации по безопасности
 
-- VPS на Ubuntu 22.04+ или совместимом Debian-based дистрибутиве
-- открытые `80/tcp` и `443/tcp`
-- один домен, который уже указывает на VPS
+Старые файлы `configure.sh`, `install.sh`, `docker-compose.yml` и шаблоны `Marzban` пока оставлены как legacy-код и не считаются основным путем установки.
 
-Если сервер совсем чистый, можно сначала прогнать bootstrap-скрипт:
+## Базовая подготовка сервера
+
+На чистом Ubuntu:
 
 ```bash
 sudo bash ./bootstrap-server.sh
 ```
 
-Он:
+Скрипт:
 
 - обновляет систему
 - создает sudo-пользователя
 - ставит `git`, `curl`, `docker`, `docker compose`, `ufw`, `fail2ban`
-- отключает root login по SSH
-- оставляет парольный SSH только для нового пользователя
-- открывает в `ufw` только `22`, `80`, `443`
+- отключает `root`-логин по SSH
+- оставляет парольный SSH для нового пользователя
+- умеет сразу добавить первый публичный SSH-ключ
+- включает `vm.overcommit_memory=1`, что полезно для `valkey`
 
-Это именно базовая подготовка сервера перед клоном и установкой репозитория.
-SSH-ключ лучше добавить сразу после этого и только потом отключать `PasswordAuthentication`.
+## Единая точка входа
 
-Пример:
+Если хотите, чтобы пользователь просто выбрал путь из меню:
 
-```dotenv
-DOMAIN=vpn.example.net
+```bash
+sudo bash ./install-remnawave.sh
 ```
+
+Меню предлагает:
+
+- `Panel + node on one server`
+- `Node only for an existing panel`
+- `Server bootstrap only`
 
 ## DNS
 
-Нужна одна `A`-запись:
+Для single-server сценария нужны три A-записи на IP одного VPS:
 
 ```text
-vpn.example.net -> <IP_вашего_VPS>
+panel.example.com -> <VPS_IP>
+sub.example.com   -> <VPS_IP>
+example.com       -> <VPS_IP>
 ```
 
-Также проверьте:
-
-- чтобы не осталось `AAAA`-записей на чужой IPv6
-- чтобы домен резолвился на IP текущего VPS
-
-## Быстрый старт
-
-Если VPS уже подготовлен:
-
-```bash
-git clone <your-repo-url> xray_server
-cd xray_server
-bash ./configure.sh
-sudo bash ./install.sh
-```
-
-Или сразу:
-
-```bash
-sudo bash ./install.sh
-```
-
-Если VPS чистый и вы хотите повторить базовую настройку с нуля:
-
-```bash
-apt update && apt install -y git curl
-git clone <your-repo-url> xray_server
-cd xray_server
-sudo bash ./bootstrap-server.sh
-```
-
-## Что спрашивает configure.sh
-
-- домен `DOMAIN`
-- каталог установки
-- образ `Marzban`
-- необязательные overrides для `UUID`, ключей, `shortId`, логина и пароля панели
-
-Если секретные поля оставить пустыми, `install.sh` сгенерирует их сам.
-
-## Как проходит установка
-
-1. Клонируете репозиторий на сервер.
-2. Запускаете `bash ./configure.sh`.
-3. Проверяете, что `DOMAIN` уже смотрит на VPS.
-4. Запускаете `sudo bash ./install.sh`.
-5. Получаете URL панели, логин, пароль, `UUID`, `PBK`, `shortId`.
-
-## Файлы
-
-- `configure.sh` - интерактивный генератор `.env`
-- `install.sh` - основной установщик
-- `docker-compose.yml` - контейнеры `Angie` и `Marzban`
-- `templates/angie.conf.tpl` - шаблон локального TLS-фасада
-- `templates/xray.json.tpl` - шаблон `REALITY` конфига для `Marzban`
-- `templates/marzban.env.tpl` - переменные окружения панели
-- `templates/mask.html.tpl` - маскировочная страница
-- `templates/subscription-index.html.tpl` - шаблон страницы подписки
-- `install-subscription-assets.sh` - установка и обновление шаблонов подписки
-- `.env.example` - пример переменных окружения
-
-## Переменные .env
-
-Минимально:
-
-```dotenv
-DOMAIN=vpn.example.net
-```
-
-Опционально:
-
-```dotenv
-APP_DIR=/opt/xray-vps-setup
-XRAY_UUID=
-XRAY_PRIVATE_KEY=
-XRAY_PUBLIC_KEY=
-XRAY_SHORT_ID=
-MARZBAN_USER=
-MARZBAN_PASS=
-MARZBAN_DASHBOARD_PATH=
-MARZBAN_SUBSCRIPTION_PATH=
-PANEL_ALLOWLIST=
-XRAY_CORE_VERSION=26.2.6
-XRAY_IMAGE_TAG=26.3.27
-MARZBAN_IMAGE=gozargah/marzban:latest
-```
-
-## Где лежат файлы после установки
-
-- `/opt/xray-vps-setup/docker-compose.yml`
-- `/opt/xray-vps-setup/.env`
-- `/opt/xray-vps-setup/angie.conf`
-- `/opt/xray-vps-setup/marzban/.env`
-- `/opt/xray-vps-setup/marzban/xray_config.json`
-- `/opt/xray-vps-setup/xray-core`
-- `/opt/xray-vps-setup/mask/index.html`
-
-## Доступ к панели
-
-После установки:
+Для отдельной ноды:
 
 ```text
-https://DOMAIN/MARZBAN_DASHBOARD_PATH/
+node2.example.com -> <SECOND_VPS_IP>
 ```
 
-Логин и пароль печатаются в конце `install.sh`.
+## Настройка .env
 
-На корне домена открывается маскировочная страница, панель доступна по скрытому пути.
+Минимальный пример:
 
-## Повторный запуск
+```dotenv
+REMNAWAVE_PANEL_DOMAIN=panel.example.com
+REMNAWAVE_SUB_DOMAIN=sub.example.com
+REMNAWAVE_NODE_DOMAIN=example.com
+LETSENCRYPT_EMAIL=admin@example.com
+```
 
-Если меняли `.env`:
+Для отдельной ноды дополнительно:
+
+```dotenv
+REMNAWAVE_PANEL_IP=203.0.113.10
+REMNAWAVE_NODE_SECRET_KEY_FILE=/root/remnawave-node-secret.pem
+```
+
+Если не хотите хранить `Secret Key` в файле, можно использовать `REMNAWAVE_NODE_SECRET_KEY`, но для многострочного секрета файл обычно надежнее.
+
+## Установка панели и ноды на одном сервере
 
 ```bash
-sudo bash ./install.sh
+cp .env.example .env
+sudo bash ./install-remnawave.sh
 ```
 
-## Обновление шаблонов подписки
+Что делает обертка:
+
+- проверяет DNS для panel/sub/node доменов
+- клонирует `eGamesAPI/remnawave-reverse-proxy`
+- на `Ubuntu 25.04` добавляет локальный патч совместимости к upstream-проверке ОС
+- запускает upstream installer в неинтерактивном режиме
+- получает сертификаты `Let's Encrypt`
+- поднимает `Remnawave`, `node` и `subscription-page`
+
+## Установка отдельной ноды ко внешней панели
+
+Сначала в панели создайте ноду и откройте ее карточку редактирования. Оттуда понадобятся:
+
+- selfsteal-домен этой ноды
+- `Secret Key`
+
+На втором сервере:
 
 ```bash
-bash ./install-subscription-assets.sh
+cp .env.example .env
+sudo bash ./install-remnawave.sh
 ```
 
-Скрипт ставит локальный шаблон по умолчанию, умеет скачивать альтернативные шаблоны по HTTPS и обновляет только нужные ключи в `Marzban`.
+Скрипт:
 
-## Примечания
+- проверяет DNS домена ноды
+- клонирует upstream-репозиторий
+- запрашивает сертификат для домена ноды
+- поднимает `remnanode` и локальный `nginx`
+- открывает `2222/tcp` только для IP сервера панели
 
-- сертификаты выпускает `Angie` через ACME после того, как `DOMAIN` начинает указывать на VPS
-- `Xray` на `443` передает обычный TLS-трафик на локальный `Angie` по `127.0.0.1:4123`
-- рекомендации по безопасности вынесены в `SECURITY.md`
+## После установки панели
+
+Проверьте в интерфейсе:
+
+- `Nodes` - нода должна быть online
+- `Hosts` - должен быть создан host для selfsteal-домена
+- `Users` - пользователю нужно выдать доступ, иначе подписка будет пустой
+
+## Важные оговорки
+
+- upstream-режим `panel + node on one server` помечен авторами как не рекомендованный для production
+- на практике схема работает, но ее лучше считать управляемым компромиссом, а не эталоном
+- для нового прод-разворачивания предпочтительнее `Ubuntu 24.04`, даже если `25.04` удается завести локальным патчем
