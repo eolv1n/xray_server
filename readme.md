@@ -1,12 +1,16 @@
 # xray_server
 
-Репозиторий теперь ориентирован на `Remnawave` и хранит локальные обертки вокруг `eGamesAPI/remnawave-reverse-proxy`, плюс базовую подготовку VPS.
+Репозиторий ориентирован на два пути установки:
+
+- `Remnawave` (через upstream `eGamesAPI/remnawave-reverse-proxy`)
+- `Clean 3x-ui + Angie` (Angie как маска и reverse proxy панели)
 
 ## Что здесь получается
 
 - базовая безопасная подготовка Ubuntu-сервера
 - `Remnawave panel + node + subscription-page` на одном VPS
 - отдельная `Remnawave`-нода, которую можно подключить ко внешней панели
+- `3x-ui + Angie` на одном VPS
 - один понятный `.env` c доменами и email
 
 ## Поддерживаемая схема
@@ -30,10 +34,11 @@
 - `install-remnawave.sh` - единая точка входа с выбором сценария
 - `install-remnawave-panel-node.sh` - установка панели и ноды на один сервер
 - `install-remnawave-node.sh` - установка отдельной ноды к существующей панели
+- `install-3xui-angie.sh` - установка `3x-ui + Angie`
 - `.env.example` - пример переменных окружения
 - `SECURITY.md` - базовые рекомендации по безопасности
 
-Старые файлы `configure.sh`, `install.sh`, `docker-compose.yml` и шаблоны `Marzban` пока оставлены как legacy-код и не считаются основным путем установки.
+Старые `configure.sh` и `install.sh` оставлены как совместимые обертки на новый единый установщик.
 
 ## Базовая подготовка сервера
 
@@ -65,6 +70,7 @@ sudo bash ./install-remnawave.sh
 
 - `Panel + node on one server`
 - `Node only for an existing panel`
+- `Clean 3x-ui + Angie`
 - `Server bootstrap only`
 
 ## DNS
@@ -81,6 +87,13 @@ example.com       -> <VPS_IP>
 
 ```text
 node2.example.com -> <SECOND_VPS_IP>
+```
+
+Для `3x-ui + Angie`:
+
+```text
+panel.example.com -> <VPS_IP>   # вход в 3x-ui через Angie
+site.example.com  -> <VPS_IP>   # маска
 ```
 
 ## Настройка .env
@@ -102,6 +115,14 @@ REMNAWAVE_NODE_SECRET_KEY_FILE=/root/remnawave-node-secret.pem
 ```
 
 Если не хотите хранить `Secret Key` в файле, можно использовать `REMNAWAVE_NODE_SECRET_KEY`, но для многострочного секрета файл обычно надежнее.
+
+Для `3x-ui + Angie` дополнительно:
+
+```dotenv
+XUI_PANEL_DOMAIN=panel.example.com
+XUI_MASK_DOMAIN=site.example.com
+XUI_PANEL_PORT=2053
+```
 
 ## Установка панели и ноды на одном сервере
 
@@ -148,6 +169,23 @@ sudo bash ./install-remnawave.sh
 - `Nodes` - нода должна быть online
 - `Hosts` - должен быть создан host для selfsteal-домена
 - `Users` - пользователю нужно выдать доступ, иначе подписка будет пустой
+
+## Установка 3x-ui + Angie
+
+```bash
+cp .env.example .env
+sudo bash ./install-remnawave.sh
+```
+
+Далее в меню выберите `Clean 3x-ui + Angie`.
+
+Скрипт:
+
+- ставит `3x-ui` (официальный install script)
+- получает сертификаты `Let's Encrypt` для panel+mask доменов
+- поднимает Angie в Docker на `:80/:443`
+- проксирует `https://panel-domain` в локальный `3x-ui` порт
+- отдает маску на `https://mask-domain`
 
 ## Важные оговорки
 

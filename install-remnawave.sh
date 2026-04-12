@@ -5,11 +5,11 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() {
-  printf '[remnawave-install] %s\n' "$*"
+  printf '[stack-install] %s\n' "$*"
 }
 
 fail() {
-  printf '[remnawave-install] error: %s\n' "$*" >&2
+  printf '[stack-install] error: %s\n' "$*" >&2
   exit 1
 }
 
@@ -30,11 +30,12 @@ prompt_choice() {
 
 show_menu() {
   cat <<'EOF'
-Remnawave installer
+Xray stack installer
 
 1. Panel + node on one server
 2. Node only for an existing panel
-3. Server bootstrap only
+3. Clean 3x-ui + Angie (mask + panel proxy)
+4. Server bootstrap only
 0. Exit
 EOF
 }
@@ -58,7 +59,13 @@ Scenario hints:
    - LETSENCRYPT_EMAIL
    - REMNAWAVE_NODE_SECRET_KEY_FILE or REMNAWAVE_NODE_SECRET_KEY
 
-3. Server bootstrap only
+3. Clean 3x-ui + Angie
+   Required:
+   - XUI_PANEL_DOMAIN
+   - XUI_MASK_DOMAIN
+   - LETSENCRYPT_EMAIL
+
+4. Server bootstrap only
    Use this first on a clean VPS before any Remnawave install.
 EOF
 }
@@ -69,6 +76,10 @@ run_panel_node() {
 
 run_node_only() {
   exec bash "${REPO_DIR}/install-remnawave-node.sh"
+}
+
+run_3xui_angie() {
+  exec bash "${REPO_DIR}/install-3xui-angie.sh"
 }
 
 run_bootstrap() {
@@ -92,6 +103,9 @@ main() {
         run_node_only
         ;;
       3)
+        run_3xui_angie
+        ;;
+      4)
         run_bootstrap
         ;;
       0)

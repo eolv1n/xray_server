@@ -1,87 +1,58 @@
 user angie;
 worker_processes auto;
 
-error_log /var/log/angie/error.log notice;
-
 events {
-    worker_connections 1024;
+    worker_connections 2048;
 }
 
 http {
-    log_format main '[$time_local] $proxy_protocol_addr "$http_referer" "$http_user_agent"';
-    access_log /var/log/angie/access.log main;
-
-    map $http_upgrade $connection_upgrade {
-        default upgrade;
-        ""      close;
-    }
-
-    map $proxy_protocol_addr $proxy_forwarded_elem {
-        ~^[0-9.]+$        "for=$proxy_protocol_addr";
-        ~^[0-9A-Fa-f:.]+$ "for=\"[$proxy_protocol_addr]\"";
-        default           "for=unknown";
-    }
-
-    map $http_forwarded $proxy_add_forwarded {
-        "~^(,[ \t]*)*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?)*([ \t]*,([ \t]*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\t \x21\x23-\x5B\x5D-\x7E\x80-\xFF]|\\\\[\t \x21-\x7E\x80-\xFF])*\"))?)*)?)*$" "$http_forwarded, $proxy_forwarded_elem";
-        default "$proxy_forwarded_elem";
-    }
-
-    resolver 1.1.1.1;
-
-    acme_client vless https://acme-v02.api.letsencrypt.org/directory;
+    include       /etc/angie/mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout 65;
 
     server {
         listen 80;
-        listen [::]:80;
-        return 301 https://$host$request_uri;
-    }
+        server_name __XUI_PANEL_DOMAIN__ __XUI_MASK_DOMAIN__;
 
-    server {
-        listen 127.0.0.1:4123 ssl default_server;
-        ssl_reject_handshake on;
-
-        ssl_protocols              TLSv1.2 TLSv1.3;
-        ssl_session_timeout        1h;
-        ssl_session_cache          shared:SSL:10m;
-    }
-
-    server {
-        listen 127.0.0.1:4123 ssl proxy_protocol;
-        http2 on;
-        set_real_ip_from 127.0.0.1;
-        real_ip_header proxy_protocol;
-
-        server_name __DOMAIN__;
-
-        acme vless;
-        ssl_certificate     $acme_cert_vless;
-        ssl_certificate_key $acme_cert_key_vless;
-
-        ssl_protocols              TLSv1.2 TLSv1.3;
-        ssl_ciphers                TLS13_AES_128_GCM_SHA256:TLS13_AES_256_GCM_SHA384:TLS13_CHACHA20_POLY1305_SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305;
-        ssl_prefer_server_ciphers  on;
-        ssl_stapling               on;
-        ssl_stapling_verify        on;
-        resolver                   1.1.1.1 valid=60s;
-        resolver_timeout           2s;
-
-        add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
-
-__PANEL_ALLOWLIST_RULES__
-
-        location ~* /(__MARZBAN_DASHBOARD_PATH__|statics|__MARZBAN_SUBSCRIPTION_PATH__|api|docs|redoc|openapi.json) {
-            proxy_pass                         http://unix:/var/lib/marzban/marzban.socket:;
-            proxy_http_version                 1.1;
-            proxy_set_header Host              $host;
-            proxy_set_header X-Real-IP         $proxy_protocol_addr;
-            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-            proxy_set_header Forwarded         $proxy_add_forwarded;
+        location ^~ /.well-known/acme-challenge/ {
+            root /var/www/certbot;
         }
 
         location / {
-            root /tmp;
-            index index.html;
+            return 301 https://$host$request_uri;
         }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name __XUI_PANEL_DOMAIN__;
+
+        ssl_certificate     /etc/nginx/ssl/__XUI_PANEL_DOMAIN__/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/__XUI_PANEL_DOMAIN__/privkey.pem;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+
+        location / {
+            proxy_pass         http://127.0.0.1:__XUI_PANEL_PORT__;
+            proxy_http_version 1.1;
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+            proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+    }
+
+    server {
+        listen 443 ssl;
+        http2 on;
+        server_name __XUI_MASK_DOMAIN__;
+
+        ssl_certificate     /etc/nginx/ssl/__XUI_MASK_DOMAIN__/fullchain.pem;
+        ssl_certificate_key /etc/nginx/ssl/__XUI_MASK_DOMAIN__/privkey.pem;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+
+        root  /var/www/html;
+        index index.html;
     }
 }
