@@ -116,6 +116,17 @@ REMNAWAVE_NODE_SECRET_KEY_FILE=/root/remnawave-node-secret.pem
 
 Если не хотите хранить `Secret Key` в файле, можно использовать `REMNAWAVE_NODE_SECRET_KEY`, но для многострочного секрета файл обычно надежнее.
 
+Опционально для single-server Remnawave:
+
+```dotenv
+# Установить шаблон страницы подписки legiz Orion после основной установки.
+# Включено в .env.example, потому что это штатная схема этого репозитория.
+REMNAWAVE_INSTALL_LEGIZ_ORION=1
+
+# Включайте только если конкретный VPS уперся в Docker Hub rate limit.
+REMNAWAVE_USE_IMAGE_MIRRORS=1
+```
+
 Для `3x-ui + Angie` дополнительно:
 
 ```dotenv
@@ -136,9 +147,12 @@ sudo bash ./install-remnawave.sh
 - проверяет DNS для panel/sub/node доменов
 - клонирует `eGamesAPI/remnawave-reverse-proxy`
 - на `Ubuntu 25.04` добавляет локальный патч совместимости к upstream-проверке ОС
+- при `REMNAWAVE_USE_IMAGE_MIRRORS=1` патчит часть Docker-образов на GHCR/Public ECR до первого pull
 - запускает upstream installer в неинтерактивном режиме
 - получает сертификаты `Let's Encrypt`
 - поднимает `Remnawave`, `node` и `subscription-page`
+- при `REMNAWAVE_INSTALL_LEGIZ_ORION=1` ставит Orion-шаблон страницы подписки от legiz
+- проверяет доступность frontend панели, логин администратора и состояние контейнеров
 
 ## Установка отдельной ноды ко внешней панели
 
@@ -169,6 +183,7 @@ sudo bash ./install-remnawave.sh
 - `Nodes` - нода должна быть online
 - `Hosts` - должен быть создан host для selfsteal-домена
 - `Users` - пользователю нужно выдать доступ, иначе подписка будет пустой
+- `sub.example.com/` без short UUID может отдавать пустой ответ; реальная страница подписки открывается по ссылке пользователя вида `https://sub.example.com/<shortUuid>`
 
 ## Установка 3x-ui + Angie
 
