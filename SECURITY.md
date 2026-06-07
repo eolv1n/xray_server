@@ -92,12 +92,22 @@ https://panel.example.com/
 - WireGuard
 - reverse proxy с отдельной аутентификацией
 
-## Sysctl
+## Transport Tuning
 
-Для `valkey` лучше заранее включить:
+Базовый профиль для Xray/Remnawave-ноды:
 
-```bash
-sudo sysctl -w vm.overcommit_memory=1
+```conf
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_slow_start_after_idle = 0
+vm.overcommit_memory = 1
 ```
 
-И закрепить это в `/etc/sysctl.conf`.
+`bootstrap-server.sh` закрепляет это в `/etc/sysctl.d/99-xray-network-tuning.conf`, загружает `tcp_bbr` через `/etc/modules-load.d/xray-network-tuning.conf` и пытается применить `qdisc fq` к `eth0`.
+
+Для live-диагностики bootstrap ставит:
+
+```text
+iperf3 vnstat iftop nload bmon conntrack net-tools
+```

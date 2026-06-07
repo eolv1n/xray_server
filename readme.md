@@ -53,10 +53,20 @@ sudo bash ./bootstrap-server.sh
 - обновляет систему
 - создает sudo-пользователя
 - ставит `git`, `curl`, `docker`, `docker compose`, `ufw`, `fail2ban`
+- ставит CLI network tooling: `iperf3`, `vnstat`, `iftop`, `nload`, `bmon`, `conntrack`, `net-tools`
 - отключает `root`-логин по SSH
 - оставляет парольный SSH для нового пользователя
 - умеет сразу добавить первый публичный SSH-ключ
+- применяет transport tuning профиля основной Xray-ноды: `bbr`, `fq`, `tcp_mtu_probing=1`, `tcp_slow_start_after_idle=0`
 - включает `vm.overcommit_memory=1`, что полезно для `valkey`
+- включает `vnstat`
+
+Transport tuning закрепляется в:
+
+```text
+/etc/modules-load.d/xray-network-tuning.conf
+/etc/sysctl.d/99-xray-network-tuning.conf
+```
 
 ## Единая точка входа
 

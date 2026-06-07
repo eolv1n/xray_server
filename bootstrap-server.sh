@@ -139,7 +139,21 @@ install_packages() {
   export DEBIAN_FRONTEND=noninteractive
   apt update
   apt upgrade -y
-  apt install -y ca-certificates curl git docker.io docker-compose-v2 ufw fail2ban
+  apt install -y \
+    ca-certificates \
+    curl \
+    git \
+    docker.io \
+    docker-compose-v2 \
+    ufw \
+    fail2ban \
+    iperf3 \
+    vnstat \
+    iftop \
+    nload \
+    bmon \
+    conntrack \
+    net-tools
 }
 
 configure_docker() {
@@ -155,10 +169,30 @@ configure_fail2ban() {
 }
 
 configure_kernel() {
-  if ! grep -q '^vm.overcommit_memory = 1$' /etc/sysctl.conf; then
-    printf '\nvm.overcommit_memory = 1\n' >>/etc/sysctl.conf
+  cat >/etc/modules-load.d/xray-network-tuning.conf <<'EOF'
+tcp_bbr
+EOF
+
+  cat >/etc/sysctl.d/99-xray-network-tuning.conf <<'EOF'
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_slow_start_after_idle = 0
+vm.overcommit_memory = 1
+EOF
+
+  modprobe tcp_bbr 2>/dev/null || true
+  sysctl --system >/dev/null
+
+  if command -v tc >/dev/null 2>&1 && ip link show eth0 >/dev/null 2>&1; then
+    tc qdisc replace dev eth0 root fq 2>/dev/null || true
   fi
-  sysctl -w vm.overcommit_memory=1 >/dev/null
+}
+
+configure_network_tooling() {
+  if systemctl list-unit-files vnstat.service >/dev/null 2>&1; then
+    systemctl enable --now vnstat
+  fi
 }
 
 configure_ssh() {
@@ -228,6 +262,7 @@ EOF
   configure_docker
   configure_fail2ban
   configure_kernel
+  configure_network_tooling
   configure_ssh
   configure_firewall
   print_summary
