@@ -164,6 +164,18 @@ sudo bash ./install-remnawave.sh
 - при `REMNAWAVE_INSTALL_LEGIZ_ORION=1` ставит Orion-шаблон страницы подписки от legiz
 - проверяет доступность frontend панели, логин администратора и состояние контейнеров
 
+## DPI-диагностика
+
+Для проверки признаков `tcp 16-20` / `l4-25`, DNS-подмены и июньского 2026 `Siberian`-сценария добавлена обвязка над `dpi-ch`:
+
+```bash
+tools/dpich/run-dpich.sh
+tools/dpich/run-dpich.sh --target-domain vpn.example.net
+tools/dpich/run-dpich.sh --all --target-ip 203.0.113.10 --sni vpn.example.net
+```
+
+Подробности: `tools/dpich/README.md`.
+
 ## Установка отдельной ноды ко внешней панели
 
 Сначала в панели создайте ноду и откройте ее карточку редактирования. Оттуда понадобятся:
