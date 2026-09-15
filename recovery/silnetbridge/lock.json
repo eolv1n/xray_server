@@ -1,0 +1,38 @@
+{
+  "observed_at": "2026-09-15",
+  "source_repo": "eolv1n/xray_server",
+  "upstream": {
+    "url": "https://github.com/eGamesAPI/remnawave-reverse-proxy.git",
+    "commit": "cb70c45ca4fac7791bc2801f46e686023e86a4c4"
+  },
+  "external_assets": {
+    "orion": "disabled: no index.html mount in observed live compose",
+    "yq": "not required when Orion is disabled"
+  },
+  "images": {
+    "remnawave": {
+      "observed": "remnawave/backend:2",
+      "locked": "remnawave/backend@sha256:a0e9a3d52e898b894965baed38ee45245b2cdb59ba19e198ab6371319e2968fc"
+    },
+    "remnawave-db": {
+      "observed": "postgres:18.3",
+      "locked": "postgres@sha256:52e6ffd11fddd081ae63880b635b2a61c14008c17fc98cdc7ce5472265516dd0"
+    },
+    "remnawave-redis": {
+      "observed": "valkey/valkey:9.0.3-alpine",
+      "locked": "valkey/valkey@sha256:e1095c6c76ee982cb2d1e07edbb7fb2a53606630a1d810d5a47c9f646b708bf5"
+    },
+    "remnawave-nginx": {
+      "observed": "nginx:1.28",
+      "locked": "nginx@sha256:146adea4768b83c607d0bdfa4188464e3da6e0a3ad4475db1d1d8f64f27c29cc"
+    },
+    "remnanode": {
+      "observed": "remnawave/node:latest",
+      "locked": "remnawave/node@sha256:9d57375a8168d00252f4debe7a6ac29debd8449af60467ab26b4ee212b047525"
+    },
+    "remnawave-subscription-page": {
+      "observed": "remnawave/subscription-page:latest",
+      "locked": "remnawave/subscription-page@sha256:37dd48ac794bd14a5c26d3555ff9fbe0cd4fa758b9f591864f3300ce7174a4f4"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "required": [
+    "local_restore",
+    "tls_panel",
+    "reality_vless_external",
+    "subscription_existing_user",
+    "keenetic_proxy_path",
+    "telegram_relay",
+    "rollback_ready"
+  ]
+}

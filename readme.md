@@ -226,6 +226,12 @@ sudo bash ./install-remnawave.sh
 
 ## Важные оговорки
 
+Для отдельного действующего Silnet Bridge есть source-grounded recovery
+contract: [recovery/silnetbridge/README.md](recovery/silnetbridge/README.md).
+Он фиксирует live inventory, upstream/image locks, protected backup,
+restore smoke и rollback boundary для **нового** VPS. Общий installer сам по
+себе этим contract не является.
+
 - upstream-режим `panel + node on one server` помечен авторами как не рекомендованный для production
 - на практике схема работает, но ее лучше считать управляемым компромиссом, а не эталоном
 - для нового прод-разворачивания предпочтительнее `Ubuntu 24.04`, даже если `25.04` удается завести локальным патчем
