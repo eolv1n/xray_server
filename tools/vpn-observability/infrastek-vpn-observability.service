@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect bounded VPN metrics on cp-01
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/eolv1n/infra-llm-stek/scripts/vpn-observability/collect.py
+TimeoutStartSec=55
+StandardOutput=null
+StandardError=journal
+UMask=0077
